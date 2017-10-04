@@ -33,9 +33,11 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 const char* ssid = "testm";
 const char* password = "12345678";
 String alias = "alma";
+String topicTemp; //topic string used ofr various publishes
+String publishTemp;
 unsigned long wifiCheckTimer;
 
-IPAddress myLocalIP;
+
 // Replace with the IP address of your MQTT server
 IPAddress mqttServerIP(192, 168, 1, 1);
 
@@ -127,12 +129,15 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 
 // Callback function
 void callback(const MQTT::Publish& pub) {
+
+  // Example for repeating a received packet
+
   // In order to republish this payload, a copy must be made
   // as the orignal payload buffer will be overwritten whilst
   // constructing the PUBLISH packet.
 
   // Copy the payload to a new message
-  MQTT::Publish newpub("outTopic", pub.payload(), pub.payload_len());
+  MQTT::Publish newpub("outtopic", pub.payload(), pub.payload_len());
   client.publish(newpub);
 }
 
@@ -174,12 +179,22 @@ void loop() {
       flipper.attach(0.25, flip); //blink slower during client connection
       if (client.connect(alias)) {
         Serial.println("Client connected");
-        client.publish("outtopic", "hello world");
-        Serial.println("Published on outtopic: hello world");
         client.set_callback(callback);
         Serial.println("Callback set");
-        client.subscribe("intopic");
-        Serial.println("Subscribed to intopic");
+
+        client.subscribe(alias);
+        Serial.println("Subscribed to " + alias + " topic");
+
+        IPAddress local = WiFi.localIP();
+        publishTemp = String(local[0]) + "." + String(local[1]) + "." + String(local[2]) + "." + String(local[3]);
+        topicTemp = "device/" + alias + "/ip/";
+
+        client.publish(topicTemp, publishTemp);
+        Serial.println("Publishing " + topicTemp + publishTemp);
+        topicTemp = "device/" + alias + "/fw/";
+        publishTemp = String(FW_VERSION);
+        client.publish(topicTemp, publishTemp);
+        Serial.println("Publishing " + topicTemp + publishTemp);
       }
       else
       {
