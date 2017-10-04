@@ -1,9 +1,14 @@
 /*
    Szeretném, ha adott MQTT channelen jövő üzenetre elindulna az upgrade check és az upgrade viszontválaszban leírva, hogy mi zajlik
    EEPROMBA kiírni egy jelecskét, amiből tudja, miért bootolt, és azt is megüzeni, ha felcsatlakozott az MQTT-re
+   ellenőrizze, hogy iylen alias már ne legyen több az mqtt-n. Ha van,álljon le! ????
 
    MQTT üzenettel lehessen újraindítani is: ESP.restart();
 
+  Működés:
+  Feliratkozik az ota/IP_CÍM csatornára
+  Ha ezen jön egy üzenet, hogy új FW elérhető, akkor ellenőrzi az elérési helyet, és ha minden OK, akkor letölti. Pl. ellenőrzi, hogy az üzenetben
+  hirdetett FW verzió nagyobb-e a mostaninál, ás egyezik-e az elérhetővel. Ha minden OK, frissít. Ha nem, akkor visszaválaszol a serialon és MQTT-n
 
 
 
@@ -11,8 +16,10 @@
 
 
 #include <ESP8266WiFi.h>
+#include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
+#include <PubSubClient.h>
 #include <Ticker.h>
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
@@ -21,14 +28,17 @@
 
 const int FW_VERSION = 1244;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
-// note: MAC.bin and MAC.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
+// note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
 const char* ssid = "testm";
 const char* password = "12345678";
+String alias="alma";
 
 unsigned long wifiCheckTimer;
 
 IPAddress myLocalIP;
+// Replace with the IP address of your MQTT server
+IPAddress mqttServerIP(192, 168, 1, 1);
 
 Ticker flipper;
 
@@ -104,16 +114,16 @@ void decodeWifiStatuses(int wifiStatus) {
 }
 
 void checkForUpdates() {
-  //String mac = getMAC();
-  String mac = "alma";
+  
+
   String fwURL = String( fwUrlBase );
-  fwURL.concat( mac );
+  fwURL.concat( alias );
   String fwVersionURL = fwURL;
   fwVersionURL.concat( ".version" );
 
   Serial.println( "Checking for firmware updates." );
-  Serial.print( "MAC address: " );
-  Serial.println( mac );
+  Serial.print( "Alias: " );
+  Serial.println( alias );
   Serial.print( "Firmware version URL: " );
   Serial.println( fwVersionURL );
 
@@ -189,8 +199,18 @@ void setup()
   pinMode(LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
   flipper.attach(0.1, flip); //flip quickly during boot
+
+  Serial.println(__TIMESTAMP__);
+  Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
+  Serial.printf("Free size: %u\n", ESP.getFreeSketchSpace());
+  Serial.print( "Current firmware version: " );
+  Serial.println( FW_VERSION );
+  Serial.println();
+
   connectWifi();
-  delay(2000);
+  delay(100);
+  WiFiClient wclient;
+  PubSubClient client(wclient, mqttServerIP);
 }
 
 void loop()
@@ -198,7 +218,7 @@ void loop()
 
   if (isTimeout(wifiCheckTimer, 5000)) {
     checkWifiStatus();
-    wifiCheckTimer=millis();
+    wifiCheckTimer = millis();
   }
 
 
