@@ -33,7 +33,6 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 const char* ssid = "testm";
 const char* password = "12345678";
 String alias = "alma";
-
 unsigned long wifiCheckTimer;
 
 IPAddress myLocalIP;
