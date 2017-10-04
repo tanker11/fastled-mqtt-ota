@@ -32,7 +32,7 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 
 const char* ssid = "testm";
 const char* password = "12345678";
-String alias="alma";
+String alias = "alma";
 
 unsigned long wifiCheckTimer;
 
@@ -42,6 +42,9 @@ IPAddress mqttServerIP(192, 168, 1, 1);
 
 Ticker flipper;
 
+WiFiClient wclient;
+PubSubClient client(wclient, mqttServerIP);
+
 void flip()
 {
   int state = digitalRead(LED_PIN);  // get the current state of GPIO2 pin
@@ -49,72 +52,8 @@ void flip()
 
 }
 
-void connectWifi() {
-
-  Serial.println("Starting wifi client connection...");
-
-  WiFi.mode(WIFI_STA);
-
-
-  //WiFi.hostname(myHostname); Nem megy a hosztnév definiálása
-  WiFi.begin ( ssid, password );
-
-  int connRes = WiFi.waitForConnectResult();
-
-  if (connRes == 3) {
-    flipper.attach(0.3, flip); //success, start blinking the indicator LED with 0.3 freq
-    Serial.print("Connected to: ");
-    Serial.println(ssid);
-    Serial.print("IP: ");
-
-
-    myLocalIP = WiFi.localIP();
-    Serial.println(myLocalIP);
-    Serial.print("Last digit: ");
-    Serial.println(myLocalIP[3]);
-  }
-  else {
-    Serial.print("Error, could not connect to ");
-    Serial.println(ssid);
-    flipper.attach(0.1, flip); //error, flip quickly
-  }
-}
-
-/** Decodes the WLAN status into strings and writes to the serial interface **/
-void decodeWifiStatuses(int wifiStatus) {
-  switch (wifiStatus) {
-    case 255  :
-      Serial.println (" = WL_NO_SHIELD");
-      break;
-    case 0  :
-      Serial.println (" = WL_IDLE_STATUS");
-      break; //optional
-    case 1  :
-      Serial.println (" = WL_NO_SSID_AVAIL");
-      break; //optional
-    case 2  :
-      Serial.println (" = WL_SCAN_COMPLETED");
-      break; //optional
-    case 3  :
-      Serial.println (" = WL_CONNECTED");
-      break; //optional
-    case 4  :
-      Serial.println (" = WL_CONNECT_FAILED");
-      break; //optional
-    case 5  :
-      Serial.println (" = WL_CONNECTION_LOST");
-      break; //optional
-    case 6  :
-      Serial.println (" = WL_DISCONNECTED");
-      break; //optional
-    // you can have any number of case statements.
-    default : //Optional
-      Serial.println (" Not identified status");
-  }
-}
-
 void checkForUpdates() {
-  
+
 
   String fwURL = String( fwUrlBase );
   fwURL.concat( alias );
@@ -186,11 +125,16 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
   return true;
 }
 
-int checkWifiStatus() {
-  int connRes = WiFi.waitForConnectResult();
-  Serial.print("Checking WiFi status");
-  decodeWifiStatuses(connRes);
-  return connRes;
+
+// Callback function
+void callback(const MQTT::Publish& pub) {
+  // In order to republish this payload, a copy must be made
+  // as the orignal payload buffer will be overwritten whilst
+  // constructing the PUBLISH packet.
+
+  // Copy the payload to a new message
+  MQTT::Publish newpub("outTopic", pub.payload(), pub.payload_len());
+  client.publish(newpub);
 }
 
 void setup()
@@ -198,7 +142,7 @@ void setup()
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
-  flipper.attach(0.1, flip); //flip quickly during boot
+
 
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
@@ -207,21 +151,48 @@ void setup()
   Serial.println( FW_VERSION );
   Serial.println();
 
-  connectWifi();
+  //  connectWifi();
   delay(100);
-  WiFiClient wclient;
-  PubSubClient client(wclient, mqttServerIP);
+
 }
 
-void loop()
-{
-
-  if (isTimeout(wifiCheckTimer, 5000)) {
-    checkWifiStatus();
-    wifiCheckTimer = millis();
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Connecting to ");
+    Serial.print(ssid);
+    Serial.println("...");
+    WiFi.begin(ssid, password);
+    flipper.attach(0.1, flip); //blink quickly during wiwif connection
+    if (WiFi.waitForConnectResult() != WL_CONNECTED)
+      return;
+    Serial.println("WiFi connected");
   }
 
+  if (WiFi.status() == WL_CONNECTED) {
 
+    if (!client.connected()) {
+      Serial.println("Connecting mqtt client...");
+      flipper.attach(0.25, flip); //blink slower during client connection
+      if (client.connect(alias)) {
+        Serial.println("Client connected");
+        client.publish("outtopic", "hello world");
+        Serial.println("Published on outtopic: hello world");
+        client.set_callback(callback);
+        Serial.println("Callback set");
+        client.subscribe("intopic");
+        Serial.println("Subscribed to intopic");
+      }
+      else
+      {
+        delay(3000); //if disconnected from mqtt, wait for a while
+      }
+    }
+
+    if (client.connected())
+      client.loop();
+    flipper.detach();
+    digitalWrite(LED_PIN, HIGH); //switch off the flashing LED when connected
+  }
 }
 
 
