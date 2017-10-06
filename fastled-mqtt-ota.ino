@@ -33,9 +33,13 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 
 const char* ssid = "testm";
 const char* password = "12345678";
-String alias = "alma";
+const char* alias = "alma";
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
+char msg[50];
+char topic[50];
+char serMessage[100];
+char digitTemp[3];
 unsigned long wifiCheckTimer;
 
 
@@ -45,7 +49,7 @@ IPAddress mqttServerIP(192, 168, 1, 1);
 Ticker flipper;
 
 WiFiClient wclient;
-PubSubClient client(wclient, mqttServerIP);
+PubSubClient client(wclient);
 
 void flip()
 {
@@ -129,17 +133,24 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 
 
 // Callback function
-void callback(const MQTT::Publish& pub) {
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 
-  // Example for repeating a received packet
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    digitalWrite(LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+  } else {
+    digitalWrite(LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
+  }
 
-  // In order to republish this payload, a copy must be made
-  // as the orignal payload buffer will be overwritten whilst
-  // constructing the PUBLISH packet.
-
-  // Copy the payload to a new message
-  MQTT::Publish newpub("outtopic", pub.payload(), pub.payload_len());
-  client.publish(newpub);
 }
 
 void setup()
@@ -157,7 +168,9 @@ void setup()
   Serial.println();
 
   //  connectWifi();
-  delay(100);
+  client.setServer(mqttServerIP, 1883);
+  client.setCallback(callback);
+
 
 }
 
@@ -178,24 +191,53 @@ void loop() {
     if (!client.connected()) {
       Serial.println("Connecting mqtt client...");
       flipper.attach(0.25, flip); //blink slower during client connection
-      if (client.connect(alias)) {
+      strcpy(msg, "");
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      if (client.connect(alias, topic, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
+        //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
         Serial.println("Client connected");
-        client.set_callback(callback);
-        Serial.println("Callback set");
+        flipper.detach();
+        digitalWrite(LED_PIN, HIGH); //switch off the flashing LED when connected
 
-        client.subscribe(alias);
-        Serial.println("Subscribed to " + alias + " topic");
+        //Subscribe to alarm and fota topics
+        client.subscribe("alarm");
+        Serial.println("Subscribed to [alarm] topic");
+        client.subscribe("fota");
+        Serial.println("Subscribed to [fota] topic");
+
+        //Publish online status
+        strcpy(topic, "");
+        sprintf(topic, "device/%s/status/", alias);
+        client.publish(topic, "online", RETAINED);
 
         IPAddress local = WiFi.localIP();
-        publishTemp = String(local[0]) + "." + String(local[1]) + "." + String(local[2]) + "." + String(local[3]);
-        topicTemp = "device/" + alias + "/ip/";
 
-        client.publish(topicTemp, publishTemp, RETAINED);
-        Serial.println("Publishing " + topicTemp + publishTemp);
-        topicTemp = "device/" + alias + "/fw/";
-        publishTemp = String(FW_VERSION);
-        client.publish(topicTemp, publishTemp, RETAINED);
-        Serial.println("Publishing " + topicTemp + publishTemp);
+        //Publishing own IP on device/[alias]/ip/ topic
+        strcpy(msg, "");
+        strcpy(topic, "");
+        sprintf(msg, "%i.%i.%i.%i", local[0], local[1], local[2], local[3]);
+        sprintf(topic, "device/%s/ip/", alias);
+        client.publish(topic, msg, RETAINED);
+        strcpy(serMessage, "");
+        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+        Serial.println(serMessage);
+
+        //Publishing own FW version on device/[alias]/fw/ topic
+        strcpy(msg, "");
+        strcpy(topic, "");
+        sprintf(msg, "%i", FW_VERSION);
+        sprintf(topic, "device/%s/fw/", alias);
+        client.publish(topic, msg, RETAINED);
+        strcpy(serMessage, "");
+        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+        Serial.println(serMessage);
+        /*
+          Serial.println("Publishing " + topicTemp + publishTemp);
+          topicTemp = "device/" + alias + "/fw/";
+          publishTemp = String(FW_VERSION);
+          client.publish(topicTemp, publishTemp, RETAINED);
+          Serial.println("Publishing " + topicTemp + publishTemp);*/
       }
       else
       {
@@ -205,8 +247,8 @@ void loop() {
 
     if (client.connected())
       client.loop();
-    flipper.detach();
-    digitalWrite(LED_PIN, HIGH); //switch off the flashing LED when connected
+
+
   }
 }
 
