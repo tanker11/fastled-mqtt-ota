@@ -25,6 +25,7 @@
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 #define LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
+#define RETAINED true
 
 const int FW_VERSION = 1244;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
@@ -32,15 +33,23 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 
 const char* ssid = "testm";
 const char* password = "12345678";
-String alias="alma";
-
+const char* alias = "alma";
+String topicTemp; //topic string used ofr various publishes
+String publishTemp;
+char msg[50];
+char topic[50];
+char serMessage[100];
+char digitTemp[3];
 unsigned long wifiCheckTimer;
 
-IPAddress myLocalIP;
+
 // Replace with the IP address of your MQTT server
 IPAddress mqttServerIP(192, 168, 1, 1);
 
 Ticker flipper;
+
+WiFiClient wclient;
+PubSubClient client(wclient);
 
 void flip()
 {
@@ -49,72 +58,8 @@ void flip()
 
 }
 
-void connectWifi() {
-
-  Serial.println("Starting wifi client connection...");
-
-  WiFi.mode(WIFI_STA);
-
-
-  //WiFi.hostname(myHostname); Nem megy a hosztnév definiálása
-  WiFi.begin ( ssid, password );
-
-  int connRes = WiFi.waitForConnectResult();
-
-  if (connRes == 3) {
-    flipper.attach(0.3, flip); //success, start blinking the indicator LED with 0.3 freq
-    Serial.print("Connected to: ");
-    Serial.println(ssid);
-    Serial.print("IP: ");
-
-
-    myLocalIP = WiFi.localIP();
-    Serial.println(myLocalIP);
-    Serial.print("Last digit: ");
-    Serial.println(myLocalIP[3]);
-  }
-  else {
-    Serial.print("Error, could not connect to ");
-    Serial.println(ssid);
-    flipper.attach(0.1, flip); //error, flip quickly
-  }
-}
-
-/** Decodes the WLAN status into strings and writes to the serial interface **/
-void decodeWifiStatuses(int wifiStatus) {
-  switch (wifiStatus) {
-    case 255  :
-      Serial.println (" = WL_NO_SHIELD");
-      break;
-    case 0  :
-      Serial.println (" = WL_IDLE_STATUS");
-      break; //optional
-    case 1  :
-      Serial.println (" = WL_NO_SSID_AVAIL");
-      break; //optional
-    case 2  :
-      Serial.println (" = WL_SCAN_COMPLETED");
-      break; //optional
-    case 3  :
-      Serial.println (" = WL_CONNECTED");
-      break; //optional
-    case 4  :
-      Serial.println (" = WL_CONNECT_FAILED");
-      break; //optional
-    case 5  :
-      Serial.println (" = WL_CONNECTION_LOST");
-      break; //optional
-    case 6  :
-      Serial.println (" = WL_DISCONNECTED");
-      break; //optional
-    // you can have any number of case statements.
-    default : //Optional
-      Serial.println (" Not identified status");
-  }
-}
-
 void checkForUpdates() {
-  
+
 
   String fwURL = String( fwUrlBase );
   fwURL.concat( alias );
@@ -186,11 +131,26 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
   return true;
 }
 
-int checkWifiStatus() {
-  int connRes = WiFi.waitForConnectResult();
-  Serial.print("Checking WiFi status");
-  decodeWifiStatuses(connRes);
-  return connRes;
+
+// Callback function
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    digitalWrite(LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+  } else {
+    digitalWrite(LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
+  }
+
 }
 
 void setup()
@@ -198,7 +158,7 @@ void setup()
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
-  flipper.attach(0.1, flip); //flip quickly during boot
+
 
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
@@ -207,21 +167,89 @@ void setup()
   Serial.println( FW_VERSION );
   Serial.println();
 
-  connectWifi();
-  delay(100);
-  WiFiClient wclient;
-  PubSubClient client(wclient, mqttServerIP);
+  //  connectWifi();
+  client.setServer(mqttServerIP, 1883);
+  client.setCallback(callback);
+
+
 }
 
-void loop()
-{
-
-  if (isTimeout(wifiCheckTimer, 5000)) {
-    checkWifiStatus();
-    wifiCheckTimer = millis();
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Connecting to ");
+    Serial.print(ssid);
+    Serial.println("...");
+    WiFi.begin(ssid, password);
+    flipper.attach(0.1, flip); //blink quickly during wiwif connection
+    if (WiFi.waitForConnectResult() != WL_CONNECTED)
+      return;
+    Serial.println("WiFi connected");
   }
 
+  if (WiFi.status() == WL_CONNECTED) {
 
+    if (!client.connected()) {
+      Serial.println("Connecting mqtt client...");
+      flipper.attach(0.25, flip); //blink slower during client connection
+      strcpy(msg, "");
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      if (client.connect(alias, topic, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
+        //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
+        Serial.println("Client connected");
+        flipper.detach();
+        digitalWrite(LED_PIN, HIGH); //switch off the flashing LED when connected
+
+        //Subscribe to alarm and fota topics
+        client.subscribe("alarm");
+        Serial.println("Subscribed to [alarm] topic");
+        client.subscribe("fota");
+        Serial.println("Subscribed to [fota] topic");
+
+        //Publish online status
+        strcpy(topic, "");
+        sprintf(topic, "device/%s/status/", alias);
+        client.publish(topic, "online", RETAINED);
+
+        IPAddress local = WiFi.localIP();
+
+        //Publishing own IP on device/[alias]/ip/ topic
+        strcpy(msg, "");
+        strcpy(topic, "");
+        sprintf(msg, "%i.%i.%i.%i", local[0], local[1], local[2], local[3]);
+        sprintf(topic, "device/%s/ip/", alias);
+        client.publish(topic, msg, RETAINED);
+        strcpy(serMessage, "");
+        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+        Serial.println(serMessage);
+
+        //Publishing own FW version on device/[alias]/fw/ topic
+        strcpy(msg, "");
+        strcpy(topic, "");
+        sprintf(msg, "%i", FW_VERSION);
+        sprintf(topic, "device/%s/fw/", alias);
+        client.publish(topic, msg, RETAINED);
+        strcpy(serMessage, "");
+        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+        Serial.println(serMessage);
+        /*
+          Serial.println("Publishing " + topicTemp + publishTemp);
+          topicTemp = "device/" + alias + "/fw/";
+          publishTemp = String(FW_VERSION);
+          client.publish(topicTemp, publishTemp, RETAINED);
+          Serial.println("Publishing " + topicTemp + publishTemp);*/
+      }
+      else
+      {
+        delay(3000); //if disconnected from mqtt, wait for a while
+      }
+    }
+
+    if (client.connected())
+      client.loop();
+
+
+  }
 }
 
 
