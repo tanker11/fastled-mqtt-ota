@@ -25,6 +25,7 @@
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 #define LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
+#define RETAINED true
 
 const int FW_VERSION = 1244;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
@@ -189,11 +190,11 @@ void loop() {
         publishTemp = String(local[0]) + "." + String(local[1]) + "." + String(local[2]) + "." + String(local[3]);
         topicTemp = "device/" + alias + "/ip/";
 
-        client.publish(topicTemp, publishTemp);
+        client.publish(topicTemp, publishTemp, RETAINED);
         Serial.println("Publishing " + topicTemp + publishTemp);
         topicTemp = "device/" + alias + "/fw/";
         publishTemp = String(FW_VERSION);
-        client.publish(topicTemp, publishTemp);
+        client.publish(topicTemp, publishTemp, RETAINED);
         Serial.println("Publishing " + topicTemp + publishTemp);
       }
       else
