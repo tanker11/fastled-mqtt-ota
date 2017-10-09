@@ -32,7 +32,7 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 
 const char* ssid = "testm";
 const char* password = "12345678";
-const char* alias = "alma";
+const char* alias = "korte";
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -90,6 +90,11 @@ void checkForUpdates() {
     if ( newVersion > FW_VERSION ) {
       Serial.println( "Preparing to update" );
 
+      //Publish FW found status
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      client.publish(topic, "FW found, downloading");
+
       String fwImageURL = fwURL;
       fwImageURL.concat( ".bin" );
       Serial.println( "Update started." );
@@ -98,20 +103,36 @@ void checkForUpdates() {
       switch (ret) {
         case HTTP_UPDATE_FAILED:
           Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+          //Publish failed status
+          strcpy(topic, "");
+          sprintf(topic, "device/%s/status/", alias);
+          client.publish(topic, "HTTP update failed");
           break;
 
         case HTTP_UPDATE_NO_UPDATES:
           Serial.println("HTTP_UPDATE_NO_UPDATES");
+          //Publish no HTTP update status
+          strcpy(topic, "");
+          sprintf(topic, "device/%s/status/", alias);
+          client.publish(topic, "No HTTP updates");
           break;
       }
     }
     else {
       Serial.println( "Already on latest version" );
+      //Publish FW found status
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      client.publish(topic, "Already on latest version");
     }
   }
   else {
     Serial.print( "Firmware version check failed, got HTTP response code " );
     Serial.println( httpCode );
+    //Publish failed status
+    strcpy(topic, "");
+    sprintf(topic, "device/%s/status/", alias);
+    client.publish(topic, "Could not check available FW");
   }
   httpClient.end();
 }
@@ -167,6 +188,11 @@ void processRecMessage() {
     Serial.println("Fota branch");
     if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
       checkForUpdates();
+    }
+    if (strcmp(recMsg, "reboot") == 0) { //command received for reboot
+      Serial.println("Rebooting...");
+      delay(1000);
+      ESP.restart();
     }
 
   }
