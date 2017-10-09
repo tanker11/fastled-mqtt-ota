@@ -20,19 +20,42 @@
 #include <ESP8266httpUpdate.h>
 #include <PubSubClient.h>
 #include <Ticker.h>
+#include "FastLED.h"
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
-#define LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
+#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
+//Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
+#define FASTLED_INTERRUPT_RETRY_COUNT 3
+#define LED_PIN     4
+#define LED_TYPE    WS2812
+#define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
+//#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
+int BRIGHTNESS =           32;
+
+const uint8_t kMatrixWidth  = 8  ;
+const uint8_t kMatrixHeight = 8;
+const bool    kMatrixSerpentineLayout = false;
+#define NUM_LEDS (kMatrixWidth * kMatrixHeight)
+#define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
+
+// The leds
+CRGB leds[kMatrixWidth * kMatrixHeight];
+
+#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define FRAMES_PER_SECOND  100    // here you can control the speed. 
+
+
+#define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 #define RETAINED true
 
-const int FW_VERSION = 1246;
+const int FW_VERSION = 1001;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
 const char* ssid = "testm";
 const char* password = "12345678";
-const char* alias = "korte";
+const char* alias = "flmqttota001";
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -55,8 +78,8 @@ PubSubClient client(wclient);
 
 void flip()
 {
-  int state = digitalRead(LED_PIN);  // get the current state of GPIO2 pin
-  digitalWrite(LED_PIN, !state);     // set pin to the opposite state
+  int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
+  digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
 
 }
 
@@ -173,11 +196,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   // Switch on the LED if an 1 was received as first character
   if ((char)payload[0] == '1') {
-    digitalWrite(LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    digitalWrite(WIFI_LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
     // but actually the LED is on; this is because
     // it is acive low on the ESP-01)
   } else {
-    digitalWrite(LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
+    digitalWrite(WIFI_LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
   }
 
 }
@@ -211,7 +234,7 @@ void processRecMessage() {
 void setup()
 {
   Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
+  pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
 
 
@@ -227,6 +250,13 @@ void setup()
   client.setCallback(callback);
 
   msgReceived = false;
+
+  delay(1000); //safety delay
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(BRIGHTNESS);
+  set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
+
+
 }
 
 void loop() {
@@ -253,7 +283,7 @@ void loop() {
         //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
         Serial.println("Client connected");
         flipper.detach();
-        digitalWrite(LED_PIN, HIGH); //switch off the flashing LED when connected
+        digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
 
         //Subscribe to alarm and fota topics
         client.subscribe("alarm");
@@ -300,9 +330,17 @@ void loop() {
       }
     }
 
-    if (client.connected())
-      client.loop();
+    if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
+
+    // Turn the LED on, then pause
+    leds[0] = CRGB::Red;
+    FastLED.show();
+    delay(500);
+    // Now turn the LED off, then pause
+    leds[0] = CRGB::Black;
+    FastLED.show();
+    delay(500);
 
   }
 }
