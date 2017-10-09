@@ -24,7 +24,7 @@
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
-#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
+//#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
 //Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
 #define FASTLED_INTERRUPT_RETRY_COUNT 3
 #define LED_PIN     4
@@ -36,6 +36,7 @@ int BRIGHTNESS =           32;
 const uint8_t kMatrixWidth  = 8  ;
 const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
@@ -75,7 +76,24 @@ Ticker flipper;
 
 WiFiClient wclient;
 PubSubClient client(wclient);
+/********************************************/
+void rainbow()
+{
+  // FastLED's built-in rainbow generator
+  fill_rainbow( leds, NUM_LEDS, gHue, 7);
+}
 
+void bpm()
+{
+  // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
+  uint8_t BeatsPerMinute = 62;
+  CRGBPalette16 palette = PartyColors_p;
+  uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
+  for( int i = 0; i < NUM_LEDS; i++) { //9948
+    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  }
+}
+/********************************************/
 void flip()
 {
   int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
@@ -257,6 +275,7 @@ void setup()
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
 
 
+
 }
 
 void loop() {
@@ -333,15 +352,14 @@ void loop() {
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
 
-    // Turn the LED on, then pause
-    leds[0] = CRGB::Red;
+    // send the 'leds' array out to the actual LED strip
     FastLED.show();
-    delay(500);
-    // Now turn the LED off, then pause
-    leds[0] = CRGB::Black;
-    FastLED.show();
-    delay(500);
-
+    // insert a delay to keep the framerate modest
+ //   FastLED.delay(1000 / FRAMES_PER_SECOND);
+    EVERY_N_MILLISECONDS( 20 ) {
+      gHue++;  // slowly cycle the "base color" through the rainbow
+    }
+    bpm();
   }
 }
 
