@@ -14,7 +14,6 @@
 
 */
 
-
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
@@ -38,6 +37,9 @@ String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
 char topic[50];
+char recMsg[50];
+char recTopic[50];
+boolean msgReceived; //shows if message received
 char serMessage[100];
 char digitTemp[3];
 unsigned long wifiCheckTimer;
@@ -136,11 +138,17 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
+  strcpy(recTopic,"");
+  strcpy(recTopic,topic); //storing received topic for further processing
   Serial.print("] ");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+  int i;
+  for (i = 0; i < length; i++) {
+    // Serial.print((char)payload[i]);
+    recMsg[i] = (char)payload[i];
   }
-  Serial.println();
+  recMsg[i] = '\0'; //Closing the C string
+  Serial.println(recMsg);
+  msgReceived = true;
 
   // Switch on the LED if an 1 was received as first character
   if ((char)payload[0] == '1') {
@@ -151,6 +159,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
     digitalWrite(LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
   }
 
+}
+
+void processMessage() {
+  Serial.println("processing message");
+  Serial.print(recTopic);
+  Serial.println(recMsg);
+
+  msgReceived = false;
 }
 
 void setup()
@@ -171,7 +187,7 @@ void setup()
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
 
-
+  msgReceived = false;
 }
 
 void loop() {
@@ -180,7 +196,7 @@ void loop() {
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
-    flipper.attach(0.1, flip); //blink quickly during wiwif connection
+    flipper.attach(0.1, flip); //blink quickly during wifi connection
     if (WiFi.waitForConnectResult() != WL_CONNECTED)
       return;
     Serial.println("WiFi connected");
@@ -247,7 +263,7 @@ void loop() {
 
     if (client.connected())
       client.loop();
-
+   if (msgReceived) processMessage();
 
   }
 }
