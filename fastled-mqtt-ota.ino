@@ -14,7 +14,6 @@
 
 */
 
-
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
@@ -27,17 +26,20 @@
 #define LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 #define RETAINED true
 
-const int FW_VERSION = 1244;
+const int FW_VERSION = 1246;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
 const char* ssid = "testm";
 const char* password = "12345678";
-const char* alias = "alma";
+const char* alias = "korte";
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
 char topic[50];
+char recMsg[50];
+char recTopic[50];
+boolean msgReceived; //shows if message received
 char serMessage[100];
 char digitTemp[3];
 unsigned long wifiCheckTimer;
@@ -88,6 +90,11 @@ void checkForUpdates() {
     if ( newVersion > FW_VERSION ) {
       Serial.println( "Preparing to update" );
 
+      //Publish FW found status
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      client.publish(topic, "FW found, downloading");
+
       String fwImageURL = fwURL;
       fwImageURL.concat( ".bin" );
       Serial.println( "Update started." );
@@ -96,20 +103,36 @@ void checkForUpdates() {
       switch (ret) {
         case HTTP_UPDATE_FAILED:
           Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+          //Publish failed status
+          strcpy(topic, "");
+          sprintf(topic, "device/%s/status/", alias);
+          client.publish(topic, "HTTP update failed");
           break;
 
         case HTTP_UPDATE_NO_UPDATES:
           Serial.println("HTTP_UPDATE_NO_UPDATES");
+          //Publish no HTTP update status
+          strcpy(topic, "");
+          sprintf(topic, "device/%s/status/", alias);
+          client.publish(topic, "No HTTP updates");
           break;
       }
     }
     else {
       Serial.println( "Already on latest version" );
+      //Publish FW found status
+      strcpy(topic, "");
+      sprintf(topic, "device/%s/status/", alias);
+      client.publish(topic, "Already on latest version");
     }
   }
   else {
     Serial.print( "Firmware version check failed, got HTTP response code " );
     Serial.println( httpCode );
+    //Publish failed status
+    strcpy(topic, "");
+    sprintf(topic, "device/%s/status/", alias);
+    client.publish(topic, "Could not check available FW");
   }
   httpClient.end();
 }
@@ -136,11 +159,17 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
+  strcpy(recTopic, "");
+  strcpy(recTopic, topic); //storing received topic for further processing
   Serial.print("] ");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+  int i;
+  for (i = 0; i < length; i++) {
+    // Serial.print((char)payload[i]);
+    recMsg[i] = (char)payload[i];
   }
-  Serial.println();
+  recMsg[i] = '\0'; //Closing the C string
+  Serial.println(recMsg);
+  msgReceived = true;
 
   // Switch on the LED if an 1 was received as first character
   if ((char)payload[0] == '1') {
@@ -151,6 +180,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
     digitalWrite(LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
   }
 
+}
+
+void processRecMessage() {
+
+  if (strcmp(recTopic, "fota") == 0) {
+    Serial.println("Fota branch");
+    if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
+      checkForUpdates();
+    }
+    if (strcmp(recMsg, "reboot") == 0) { //command received for reboot
+      Serial.println("Rebooting...");
+      delay(1000);
+      ESP.restart();
+    }
+
+  }
+  if (strcmp(recTopic, "alarm") == 0) {
+    Serial.println("Alarm branch");
+    if (strcmp(recMsg, "valami") == 0) {
+
+    }
+
+  }
+
+
+  msgReceived = false;
 }
 
 void setup()
@@ -171,7 +226,7 @@ void setup()
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
 
-
+  msgReceived = false;
 }
 
 void loop() {
@@ -180,7 +235,7 @@ void loop() {
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
-    flipper.attach(0.1, flip); //blink quickly during wiwif connection
+    flipper.attach(0.1, flip); //blink quickly during wifi connection
     if (WiFi.waitForConnectResult() != WL_CONNECTED)
       return;
     Serial.println("WiFi connected");
@@ -247,7 +302,7 @@ void loop() {
 
     if (client.connected())
       client.loop();
-
+    if (msgReceived) processRecMessage();
 
   }
 }
