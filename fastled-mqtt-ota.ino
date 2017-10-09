@@ -26,7 +26,7 @@
 #define LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 #define RETAINED true
 
-const int FW_VERSION = 1244;
+const int FW_VERSION = 1246;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
@@ -138,8 +138,8 @@ boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
-  strcpy(recTopic,"");
-  strcpy(recTopic,topic); //storing received topic for further processing
+  strcpy(recTopic, "");
+  strcpy(recTopic, topic); //storing received topic for further processing
   Serial.print("] ");
   int i;
   for (i = 0; i < length; i++) {
@@ -161,10 +161,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 }
 
-void processMessage() {
-  Serial.println("processing message");
-  Serial.print(recTopic);
-  Serial.println(recMsg);
+void processRecMessage() {
+
+  if (strcmp(recTopic, "fota") == 0) {
+    Serial.println("Fota branch");
+    if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
+      checkForUpdates();
+    }
+
+  }
+  if (strcmp(recTopic, "alarm") == 0) {
+    Serial.println("Alarm branch");
+    if (strcmp(recMsg, "valami") == 0) {
+
+    }
+
+  }
+
 
   msgReceived = false;
 }
@@ -263,7 +276,7 @@ void loop() {
 
     if (client.connected())
       client.loop();
-   if (msgReceived) processMessage();
+    if (msgReceived) processRecMessage();
 
   }
 }
