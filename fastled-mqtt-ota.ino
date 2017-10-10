@@ -20,14 +20,14 @@
 #include <ESP8266httpUpdate.h>
 #include <PubSubClient.h>
 #include <Ticker.h>
-#include "FastLED.h"
+#include <FastLED.h>
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 //#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
 //Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
 #define FASTLED_INTERRUPT_RETRY_COUNT 3
-#define LED_PIN     4
+#define LED_PIN     5
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
@@ -76,7 +76,32 @@ Ticker flipper;
 
 WiFiClient wclient;
 PubSubClient client(wclient);
-/********************************************/
+
+/****************FastLED FUNCTIONS****************************/
+void gradientRedGreen() {
+  fill_gradient(leds, 0, CHSV(0, 255, 255), NUM_LEDS - 1, CHSV(96, 255, 255), SHORTEST_HUES);
+
+  FastLED.show();
+
+}
+
+void tripleBlueBlink() {
+  for (int j = 0; j < 3; j++) {
+    fill_solid( leds, NUM_LEDS, CRGB::Blue);
+    /*for ( int i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CRGB::Blue;
+      }*/
+    FastLED.show();
+    delay(500);
+    fill_solid( leds, NUM_LEDS, CRGB::Black);
+    /*for ( int i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CRGB::Black;
+      }*/
+    FastLED.show();
+    delay(500);
+  }
+}
+
 void rainbow()
 {
   // FastLED's built-in rainbow generator
@@ -89,11 +114,11 @@ void bpm()
   uint8_t BeatsPerMinute = 62;
   CRGBPalette16 palette = PartyColors_p;
   uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
-  for( int i = 0; i < NUM_LEDS; i++) { //9948
-    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  for ( int i = 0; i < NUM_LEDS; i++) { //9948
+    leds[i] = ColorFromPalette(palette, gHue + (i * 2), beat - gHue + (i * 10));
   }
 }
-/********************************************/
+/**************FastLED FUNCTIONS END******************************/
 void flip()
 {
   int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
@@ -102,7 +127,6 @@ void flip()
 }
 
 void checkForUpdates() {
-
 
   String fwURL = String( fwUrlBase );
   fwURL.concat( alias );
@@ -114,6 +138,8 @@ void checkForUpdates() {
   Serial.println( alias );
   Serial.print( "Firmware version URL: " );
   Serial.println( fwVersionURL );
+  //Blink three times with BLUE color to show the checking phase
+  tripleBlueBlink();
 
   HTTPClient httpClient;
   httpClient.begin( fwVersionURL );
@@ -130,6 +156,9 @@ void checkForUpdates() {
 
     if ( newVersion > FW_VERSION ) {
       Serial.println( "Preparing to update" );
+      //Changing all LEDs to static pattern to make the update status visible
+      gradientRedGreen();
+
 
       //Publish FW found status
       strcpy(topic, "");
@@ -269,7 +298,7 @@ void setup()
 
   msgReceived = false;
 
-  delay(1000); //safety delay
+  delay(300); //safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
   FastLED.setBrightness(BRIGHTNESS);
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
@@ -355,7 +384,7 @@ void loop() {
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
     // insert a delay to keep the framerate modest
- //   FastLED.delay(1000 / FRAMES_PER_SECOND);
+    //   FastLED.delay(1000 / FRAMES_PER_SECOND);
     EVERY_N_MILLISECONDS( 20 ) {
       gHue++;  // slowly cycle the "base color" through the rainbow
     }
