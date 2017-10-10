@@ -31,7 +31,7 @@
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int BRIGHTNESS =           32;
+int MAX_BRIGHTNESS =           32;
 
 const uint8_t kMatrixWidth  = 8  ;
 const uint8_t kMatrixHeight = 8;
@@ -79,7 +79,7 @@ PubSubClient client(wclient);
 
 /****************FastLED FUNCTIONS****************************/
 void gradientRedGreen() {
-  fill_gradient(leds, 0, CHSV(0, 255, 255), NUM_LEDS - 1, CHSV(96, 255, 255), SHORTEST_HUES);
+  fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
 
   FastLED.show();
 
@@ -88,17 +88,11 @@ void gradientRedGreen() {
 void tripleBlueBlink() {
   for (int j = 0; j < 3; j++) {
     fill_solid( leds, NUM_LEDS, CRGB::Blue);
-    /*for ( int i = 0; i < NUM_LEDS; i++) {
-      leds[i] = CRGB::Blue;
-      }*/
     FastLED.show();
-    delay(500);
+    delay(200);
     fill_solid( leds, NUM_LEDS, CRGB::Black);
-    /*for ( int i = 0; i < NUM_LEDS; i++) {
-      leds[i] = CRGB::Black;
-      }*/
     FastLED.show();
-    delay(500);
+    delay(400);
   }
 }
 
@@ -118,6 +112,11 @@ void bpm()
     leds[i] = ColorFromPalette(palette, gHue + (i * 2), beat - gHue + (i * 10));
   }
 }
+
+
+
+
+
 /**************FastLED FUNCTIONS END******************************/
 void flip()
 {
@@ -300,7 +299,7 @@ void setup()
 
   delay(300); //safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.setBrightness(MAX_BRIGHTNESS);
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
 
 
@@ -381,14 +380,13 @@ void loop() {
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
 
+
+    // insert a delay to keep the framerate modest
+    FastLED.delay(1000 / FRAMES_PER_SECOND);
+
+
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
-    // insert a delay to keep the framerate modest
-    //   FastLED.delay(1000 / FRAMES_PER_SECOND);
-    EVERY_N_MILLISECONDS( 20 ) {
-      gHue++;  // slowly cycle the "base color" through the rainbow
-    }
-    bpm();
   }
 }
 
