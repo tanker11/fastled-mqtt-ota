@@ -13,9 +13,6 @@
 
 
 */
-#include <Button.h>
-Button button3(0);
-
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -285,7 +282,7 @@ void setup()
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
-  button3.begin();
+
 
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
@@ -387,16 +384,9 @@ void loop() {
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
 
-    bpm();
+
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
-    if (button3.toggled()) {
-      if (button3.read() == Button::PRESSED)
-        Serial.println("Button 3 has been pressed");
-      else
-        Serial.println("Button 3 has been released");
-    }
-
   }
 }
 
