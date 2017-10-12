@@ -14,6 +14,14 @@
 
 */
 
+
+#include <MD_KeySwitch.h>
+
+const uint8_t SWITCH_PIN = 0;       // switch connected to this pin
+const uint8_t SWITCH_ACTIVE = LOW;  // digital signal when switch is pressed 'on'
+
+MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
+
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
@@ -283,6 +291,15 @@ void setup()
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
 
+  //KeySwitch init
+  S.begin();
+  S.enableDoublePress(true);
+  S.enableLongPress(true);
+  S.enableRepeat(false);
+  S.enableRepeatResult(false);
+  S.setLongPressTime(1000);
+  S.setDoublePressTime(500);
+
 
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
@@ -384,9 +401,22 @@ void loop() {
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
 
-
+    bpm();
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
+
+    //Handle keypresses
+    switch (S.read())
+    {
+      case MD_KeySwitch::KS_NULL:       /* Serial.println("NULL"); */   break;
+      case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS"); break;
+      case MD_KeySwitch::KS_DPRESS:     Serial.print("\nDOUBLE PRESS"); break;
+      case MD_KeySwitch::KS_LONGPRESS:  Serial.print("\nLONG PRESS");   break;
+      case MD_KeySwitch::KS_RPTPRESS:   Serial.print("\nREPEAT PRESS"); break;
+      default:                          Serial.print("\nUNKNOWN");      break;
+    }
+
+
   }
 }
 
