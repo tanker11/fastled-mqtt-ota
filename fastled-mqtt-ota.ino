@@ -64,7 +64,7 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 
 const char* ssid = "testm";
 const char* password = "12345678";
-const char* alias = "flmqttota001";
+const char* alias = "test1";
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -126,13 +126,9 @@ void bpm()
 
 
 /**************FastLED FUNCTIONS END******************************/
-void flip()
-{
-  int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
-  digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
 
-}
 
+/**************FOTA FUNCTIONS ******************************/
 void checkForUpdates() {
 
   String fwURL = String( fwUrlBase );
@@ -214,24 +210,12 @@ void checkForUpdates() {
   httpClient.end();
 }
 
-boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
-{
-  unsigned long now = millis();
-  if (checkTime <= now)
-  {
-    if ( (unsigned long)(now - checkTime )  < timeWindow )
-      return false;
-  }
-  else
-  {
-    if ( (unsigned long)(checkTime - now) < timeWindow )
-      return false;
-  }
 
-  return true;
-}
+/**************FOTA FUNCTIONS END******************************/
 
 
+
+/**************MQTT FUNCTIONS ******************************/
 // Callback function
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
@@ -259,6 +243,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 }
 
+/**************MQTT FUNCTIONS END******************************/
+
+/**************MESSAGE PROCESS FUNCTIONS ******************************/
+
 void processRecMessage() {
 
   if (strcmp(recTopic, "fota") == 0) {
@@ -284,6 +272,35 @@ void processRecMessage() {
 
   msgReceived = false;
 }
+
+/**************MESSAGE PROCESS FUNCTIONS END******************************/
+
+/**************OTHER FUNCTIONS******************************/
+
+boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
+{
+  unsigned long now = millis();
+  if (checkTime <= now)
+  {
+    if ( (unsigned long)(now - checkTime )  < timeWindow )
+      return false;
+  }
+  else
+  {
+    if ( (unsigned long)(checkTime - now) < timeWindow )
+      return false;
+  }
+
+  return true;
+}
+
+void flip()
+{
+  int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
+  digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
+
+}
+/**************OTHER FUNCTIONS END******************************/
 
 void setup()
 {
@@ -324,6 +341,8 @@ void setup()
 }
 
 void loop() {
+
+  /**************CONNECT/RECONNECT SEQUENCE ******************************/
   if (WiFi.status() != WL_CONNECTED) {
     Serial.print("Connecting to ");
     Serial.print(ssid);
@@ -393,6 +412,8 @@ void loop() {
         delay(3000); //if disconnected from mqtt, wait for a while
       }
     }
+    /**************CONNECT/RECONNECT SEQUENCE END ******************************/
+
 
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
