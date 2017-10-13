@@ -216,8 +216,43 @@ void checkForUpdates() {
 
 
 /**************MQTT FUNCTIONS ******************************/
+//Subscribe function
+void subscribeToTopics() {
+  client.subscribe("alarm");
+  Serial.println("Subscribed to [alarm] topic");
+  client.subscribe("fota");
+  Serial.println("Subscribed to [fota] topic");
+}
+void publishMyIP() {
+  //Publishing own IP on device/[alias]/ip/ topic
+  IPAddress local = WiFi.localIP();
+
+
+  strcpy(msg, "");
+  strcpy(topic, "");
+  sprintf(msg, "%i.%i.%i.%i", local[0], local[1], local[2], local[3]);
+  sprintf(topic, "device/%s/ip/", alias);
+  client.publish(topic, msg, RETAINED);
+  strcpy(serMessage, "");
+  sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+  Serial.println(serMessage);
+}
+
+void publishMyFW() {
+
+  //Publishing own FW version on device/[alias]/fw/ topic
+  strcpy(msg, "");
+  strcpy(topic, "");
+  sprintf(msg, "%i", FW_VERSION);
+  sprintf(topic, "device/%s/fw/", alias);
+  client.publish(topic, msg, RETAINED);
+  strcpy(serMessage, "");
+  sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
+  Serial.println(serMessage);
+}
+
 // Callback function
-void callback(char* topic, byte* payload, unsigned int length) {
+void callback(char* topic, byte * payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   strcpy(recTopic, "");
@@ -359,53 +394,26 @@ void loop() {
     if (!client.connected()) {
       Serial.println("Connecting mqtt client...");
       flipper.attach(0.25, flip); //blink slower during client connection
+
+      //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
       strcpy(msg, "");
       strcpy(topic, "");
       sprintf(topic, "device/%s/status/", alias);
       if (client.connect(alias, topic, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
-        //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
         Serial.println("Client connected");
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
 
-        //Subscribe to alarm and fota topics
-        client.subscribe("alarm");
-        Serial.println("Subscribed to [alarm] topic");
-        client.subscribe("fota");
-        Serial.println("Subscribed to [fota] topic");
+        //Subscribe to topics
+        subscribeToTopics();
 
         //Publish online status
         strcpy(topic, "");
         sprintf(topic, "device/%s/status/", alias);
         client.publish(topic, "online", RETAINED);
 
-        IPAddress local = WiFi.localIP();
-
-        //Publishing own IP on device/[alias]/ip/ topic
-        strcpy(msg, "");
-        strcpy(topic, "");
-        sprintf(msg, "%i.%i.%i.%i", local[0], local[1], local[2], local[3]);
-        sprintf(topic, "device/%s/ip/", alias);
-        client.publish(topic, msg, RETAINED);
-        strcpy(serMessage, "");
-        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
-        Serial.println(serMessage);
-
-        //Publishing own FW version on device/[alias]/fw/ topic
-        strcpy(msg, "");
-        strcpy(topic, "");
-        sprintf(msg, "%i", FW_VERSION);
-        sprintf(topic, "device/%s/fw/", alias);
-        client.publish(topic, msg, RETAINED);
-        strcpy(serMessage, "");
-        sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
-        Serial.println(serMessage);
-        /*
-          Serial.println("Publishing " + topicTemp + publishTemp);
-          topicTemp = "device/" + alias + "/fw/";
-          publishTemp = String(FW_VERSION);
-          client.publish(topicTemp, publishTemp, RETAINED);
-          Serial.println("Publishing " + topicTemp + publishTemp);*/
+        publishMyIP();
+        publishMyFW();
       }
       else
       {
