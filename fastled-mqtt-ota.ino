@@ -228,31 +228,44 @@ void checkForUpdates() {
 //Subscribe function
 void subscribeToTopics() {
 
+//Note: multible subscription will not work without client.loop();
+
   client.subscribe(TOPIC_DEV_COMMAND);
   Serial.println("Subscribed to [" TOPIC_DEV_COMMAND "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_TEST);
   Serial.println("Subscribed to [" TOPIC_DEV_TEST "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_SETURL);
   Serial.println("Subscribed to [" TOPIC_DEV_SETURL "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_FASTLED);
   Serial.println("Subscribed to [" TOPIC_DEV_FASTLED "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_ALARM);
   Serial.println("Subscribed to [" TOPIC_DEV_ALARM "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_FOTA);
   Serial.println("Subscribed to [" TOPIC_DEV_FOTA "] topic");
-  client.subscribe(TOPIC_DEV_RGB);/*
+  client.loop();
+  client.subscribe(TOPIC_DEV_RGB);
   Serial.println("Subscribed to [" TOPIC_DEV_RGB "] topic");
+  client.loop();
   client.subscribe(TOPIC_DEV_BRIGHTNESS);
   Serial.println("Subscribed to [" TOPIC_DEV_BRIGHTNESS "] topic");
-  
+  client.loop();
   client.subscribe(TOPIC_ALL_ALARM);
   Serial.println("Subscribed to [" TOPIC_ALL_ALARM "] topic");
+  client.loop();
   client.subscribe(TOPIC_ALL_FOTA);
   Serial.println("Subscribed to [" TOPIC_ALL_FOTA "] topic");
+  client.loop();
   client.subscribe(TOPIC_ALL_RGB);
   Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
+  client.loop();
   client.subscribe(TOPIC_ALL_BRIGHTNESS);
-  Serial.println("Subscribed to [" TOPIC_ALL_BRIGHTNESS "] topic");*/
+  Serial.println("Subscribed to [" TOPIC_ALL_BRIGHTNESS "] topic");
+  
 
 
 
@@ -335,19 +348,29 @@ void callback(char* topic, byte * payload, unsigned int length) {
 
 void processRecMessage() {
 
+bool validContent=false;
   if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
+
     //Serial.println(TOPIC_DEV_COMMAND " branch");
     if (strcmp(recMsg, "getfw") == 0) {
+      validContent=true;
       publishMyFW();
     }
     if (strcmp(recMsg, "getip") == 0) {
+      validContent=true;
       publishMyIP();
     }
     if (strcmp(recMsg, "getsketchsize") == 0) {
+      validContent=true;
       publishMySketchSize();
     }
     if (strcmp(recMsg, "getfreesize") == 0) {
+      validContent=true;
       publishMyFreeSize();
+    }
+        if (strcmp(recMsg, "getfreeheap") == 0) {
+          validContent=true;
+      publishMyHeap();
     }
 
     if (strcmp(recMsg, "reboot") == 0) {
@@ -358,12 +381,15 @@ void processRecMessage() {
 
   }
   if (strcmp(recTopic, TOPIC_DEV_FOTA) == 0 || strcmp(recTopic, TOPIC_ALL_FOTA) == 0) {
-    Serial.println("FOTA branch");
+
     if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
+      validContent=true;
       checkForUpdates();
     }
 
   }
+  
+  if (!validContent) Serial.println("Not a valid content");
   msgReceived = false;
 }
 
