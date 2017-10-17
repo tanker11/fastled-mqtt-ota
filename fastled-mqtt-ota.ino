@@ -30,6 +30,8 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #include <Ticker.h>
 #include <FastLED.h>
 
+#include <FastLED.h>
+
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 //#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
@@ -62,9 +64,27 @@ const int FW_VERSION = 1001;
 const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
+#define ALIAS "alma"
+#define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
+#define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
+#define TOPIC_DEV_TEST "/device/" ALIAS "/test"
+#define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
+#define TOPIC_DEV_FASTLED "/device/" ALIAS "/fastled"
+#define TOPIC_DEV_ALARM "/device/" ALIAS "/alarm"
+#define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
+#define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
+#define TOPIC_DEV_BRIGHTNESS "/device/" ALIAS "/brightness"
+
+#define TOPIC_ALL_ALARM "/all/alarm"
+#define TOPIC_ALL_FOTA "/all/fota"
+#define TOPIC_ALL_RGB "/all/rgb"
+#define TOPIC_ALL_BRIGHTNESS "/all/brightness"
+
 const char* ssid = "testm";
 const char* password = "12345678";
-const char* alias = "test1";
+const char* alias = ALIAS;
+
+
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -72,7 +92,6 @@ char topic[50];
 char recMsg[50];
 char recTopic[50];
 boolean msgReceived; //shows if message received
-char serMessage[100];
 char digitTemp[3];
 unsigned long wifiCheckTimer;
 
@@ -164,9 +183,7 @@ void checkForUpdates() {
 
 
       //Publish FW found status
-      strcpy(topic, "");
-      sprintf(topic, "device/%s/status/", alias);
-      client.publish(topic, "FW found, downloading");
+      client.publish(TOPIC_DEV_STATUS, "FW found, downloading");
 
       String fwImageURL = fwURL;
       fwImageURL.concat( ".bin" );
@@ -177,35 +194,27 @@ void checkForUpdates() {
         case HTTP_UPDATE_FAILED:
           Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
           //Publish failed status
-          strcpy(topic, "");
-          sprintf(topic, "device/%s/status/", alias);
-          client.publish(topic, "HTTP update failed");
+          client.publish(TOPIC_DEV_STATUS, "HTTP update failed");
           break;
 
         case HTTP_UPDATE_NO_UPDATES:
           Serial.println("HTTP_UPDATE_NO_UPDATES");
           //Publish no HTTP update status
-          strcpy(topic, "");
-          sprintf(topic, "device/%s/status/", alias);
-          client.publish(topic, "No HTTP updates");
+          client.publish(TOPIC_DEV_STATUS, "No HTTP updates");
           break;
       }
     }
     else {
       Serial.println( "Already on latest version" );
       //Publish FW found status
-      strcpy(topic, "");
-      sprintf(topic, "device/%s/status/", alias);
-      client.publish(topic, "Already on latest version");
+      client.publish(TOPIC_DEV_STATUS, "Already on latest version");
     }
   }
   else {
     Serial.print( "Firmware version check failed, got HTTP response code " );
     Serial.println( httpCode );
     //Publish failed status
-    strcpy(topic, "");
-    sprintf(topic, "device/%s/status/", alias);
-    client.publish(topic, "Could not check available FW");
+    client.publish(TOPIC_DEV_STATUS, "Could not check available FW");
   }
   httpClient.end();
 }
@@ -218,41 +227,90 @@ void checkForUpdates() {
 /**************MQTT FUNCTIONS ******************************/
 //Subscribe function
 void subscribeToTopics() {
-  client.subscribe("alarm");
-  Serial.println("Subscribed to [alarm] topic");
-  client.subscribe("fota");
-  Serial.println("Subscribed to [fota] topic");
+
+  client.subscribe(TOPIC_DEV_COMMAND);
+  Serial.println("Subscribed to [" TOPIC_DEV_COMMAND "] topic");
+  client.subscribe(TOPIC_DEV_TEST);
+  Serial.println("Subscribed to [" TOPIC_DEV_TEST "] topic");
+  client.subscribe(TOPIC_DEV_SETURL);
+  Serial.println("Subscribed to [" TOPIC_DEV_SETURL "] topic");
+  client.subscribe(TOPIC_DEV_FASTLED);
+  Serial.println("Subscribed to [" TOPIC_DEV_FASTLED "] topic");
+  client.subscribe(TOPIC_DEV_ALARM);
+  Serial.println("Subscribed to [" TOPIC_DEV_ALARM "] topic");
+  client.subscribe(TOPIC_DEV_FOTA);
+  Serial.println("Subscribed to [" TOPIC_DEV_FOTA "] topic");
+  client.subscribe(TOPIC_DEV_RGB);/*
+  Serial.println("Subscribed to [" TOPIC_DEV_RGB "] topic");
+  client.subscribe(TOPIC_DEV_BRIGHTNESS);
+  Serial.println("Subscribed to [" TOPIC_DEV_BRIGHTNESS "] topic");
+  
+  client.subscribe(TOPIC_ALL_ALARM);
+  Serial.println("Subscribed to [" TOPIC_ALL_ALARM "] topic");
+  client.subscribe(TOPIC_ALL_FOTA);
+  Serial.println("Subscribed to [" TOPIC_ALL_FOTA "] topic");
+  client.subscribe(TOPIC_ALL_RGB);
+  Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
+  client.subscribe(TOPIC_ALL_BRIGHTNESS);
+  Serial.println("Subscribed to [" TOPIC_ALL_BRIGHTNESS "] topic");*/
+
+
+
 }
 void publishMyIP() {
   //Publishing own IP on device/[alias]/ip/ topic
   IPAddress local = WiFi.localIP();
-
-
   strcpy(msg, "");
-  strcpy(topic, "");
-  sprintf(msg, "%i.%i.%i.%i", local[0], local[1], local[2], local[3]);
-  sprintf(topic, "device/%s/ip/", alias);
-  client.publish(topic, msg, RETAINED);
-  strcpy(serMessage, "");
-  sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
-  Serial.println(serMessage);
+  sprintf(msg, "IP: %i.%i.%i.%i", local[0], local[1], local[2], local[3]);
+  client.publish(TOPIC_DEV_STATUS, msg, RETAINED);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
 }
 
 void publishMyFW() {
 
   //Publishing own FW version on device/[alias]/fw/ topic
   strcpy(msg, "");
-  strcpy(topic, "");
-  sprintf(msg, "%i", FW_VERSION);
-  sprintf(topic, "device/%s/fw/", alias);
-  client.publish(topic, msg, RETAINED);
-  strcpy(serMessage, "");
-  sprintf(serMessage, "MQTT topic: %s, message: %s", topic, msg);
-  Serial.println(serMessage);
+  sprintf(msg, "FW: %i", FW_VERSION);
+  client.publish(TOPIC_DEV_STATUS, msg, RETAINED);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
+}
+
+void publishMyHeap() {
+
+  //Publishing own FW version on device/[alias]/fw/ topic
+  strcpy(msg, "");
+  sprintf(msg, "HEAP: %i", ESP.getFreeHeap());
+  client.publish(TOPIC_DEV_STATUS, msg);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
+}
+
+void publishMySketchSize() {
+
+  //Publishing own FW version on device/[alias]/fw/ topic
+  strcpy(msg, "");
+  sprintf(msg, "SKETCH: %i", ESP.getSketchSize());
+  client.publish(TOPIC_DEV_STATUS, msg);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
+}
+
+void publishMyFreeSize() {
+
+  //Publishing own FW version on device/[alias]/fw/ topic
+  strcpy(msg, "");
+  sprintf(msg, "FREE: %i", ESP.getFreeSketchSpace());
+  client.publish(TOPIC_DEV_STATUS, msg);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
 }
 
 // Callback function
 void callback(char* topic, byte * payload, unsigned int length) {
+  digitalWrite(WIFI_LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
+
   Serial.print("Message arrived [");
   Serial.print(topic);
   strcpy(recTopic, "");
@@ -267,44 +325,45 @@ void callback(char* topic, byte * payload, unsigned int length) {
   Serial.println(recMsg);
   msgReceived = true;
 
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    digitalWrite(WIFI_LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is acive low on the ESP-01)
-  } else {
-    digitalWrite(WIFI_LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
-  }
-
+  digitalWrite(WIFI_LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
 }
 
 /**************MQTT FUNCTIONS END******************************/
 
 /**************MESSAGE PROCESS FUNCTIONS ******************************/
 
+
 void processRecMessage() {
 
-  if (strcmp(recTopic, "fota") == 0) {
-    Serial.println("Fota branch");
-    if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
-      checkForUpdates();
+  if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
+    //Serial.println(TOPIC_DEV_COMMAND " branch");
+    if (strcmp(recMsg, "getfw") == 0) {
+      publishMyFW();
     }
-    if (strcmp(recMsg, "reboot") == 0) { //command received for reboot
+    if (strcmp(recMsg, "getip") == 0) {
+      publishMyIP();
+    }
+    if (strcmp(recMsg, "getsketchsize") == 0) {
+      publishMySketchSize();
+    }
+    if (strcmp(recMsg, "getfreesize") == 0) {
+      publishMyFreeSize();
+    }
+
+    if (strcmp(recMsg, "reboot") == 0) {
       Serial.println("Rebooting...");
       delay(1000);
       ESP.restart();
     }
 
   }
-  if (strcmp(recTopic, "alarm") == 0) {
-    Serial.println("Alarm branch");
-    if (strcmp(recMsg, "valami") == 0) {
-
+  if (strcmp(recTopic, TOPIC_DEV_FOTA) == 0 || strcmp(recTopic, TOPIC_ALL_FOTA) == 0) {
+    Serial.println("FOTA branch");
+    if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
+      checkForUpdates();
     }
 
   }
-
-
   msgReceived = false;
 }
 
@@ -335,6 +394,8 @@ void flip()
   digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
 
 }
+
+
 /**************OTHER FUNCTIONS END******************************/
 
 void setup()
@@ -371,8 +432,6 @@ void setup()
   FastLED.setBrightness(MAX_BRIGHTNESS);
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
 
-
-
 }
 
 void loop() {
@@ -397,9 +456,7 @@ void loop() {
 
       //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
       strcpy(msg, "");
-      strcpy(topic, "");
-      sprintf(topic, "device/%s/status/", alias);
-      if (client.connect(alias, topic, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
+      if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         Serial.println("Client connected");
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
@@ -408,9 +465,8 @@ void loop() {
         subscribeToTopics();
 
         //Publish online status
-        strcpy(topic, "");
-        sprintf(topic, "device/%s/status/", alias);
-        client.publish(topic, "online", RETAINED);
+
+        client.publish(TOPIC_DEV_STATUS, "online", RETAINED);
 
         publishMyIP();
         publishMyFW();
