@@ -133,10 +133,10 @@ void tripleBlueBlink() {
   for (int j = 0; j < 3; j++) {
     fill_solid( leds, NUM_LEDS, CRGB::Blue);
     FastLED.show();
-    delay(200);
+    delay(100);
     fill_solid( leds, NUM_LEDS, CRGB::Black);
     FastLED.show();
-    delay(400);
+    delay(100);
   }
 }
 //----------------------------------------------------
@@ -417,6 +417,7 @@ void processRecMessage() {
     validContent = true;
     //Serial.println(TOPIC_DEV_COMMAND " branch");
     if (strcmp(recMsg, "getfw") == 0) {
+       tripleBlueBlink();
       validContent = true;
       publishMyFW();
     }
@@ -439,7 +440,8 @@ void processRecMessage() {
 
     if (strcmp(recMsg, "reboot") == 0) {
       Serial.println("Rebooting...");
-      delay(1000);
+      tripleBlueBlink();
+      delay(500);
       ESP.restart();
     }
   }
