@@ -39,17 +39,26 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int MAX_BRIGHTNESS =           32;
+int MAX_BRIGHTNESS =  32;
 
-const uint8_t kMatrixWidth  = 8  ;
+enum {OFF, RAINBOW, BPM, ALARM, STEADY, TEST1, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+int LEDMode = OFF;
+
+
+const uint8_t kMatrixWidth  = 8;
 const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
+
 // The leds
 CRGB leds[kMatrixWidth * kMatrixHeight];
+
+CRGBPalette16 currentPalette( CRGB::Black );
+CRGBPalette16 targetPalette( CRGB::Black );
+TBlendType    currentBlending;
 
 #define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define FRAMES_PER_SECOND  100    // here you can control the speed. 
@@ -104,14 +113,15 @@ PubSubClient client(wclient);
 
 /*
 
- _____ _    ____ _____ _     _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____  
-|  ___/ \  / ___|_   _| |   | ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___| 
-| |_ / _ \ \___ \ | | | |   |  _| | | | | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \ 
-|  _/ ___ \ ___) || | | |___| |___| |_| | |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-|_|/_/   \_\____/ |_| |_____|_____|____/  |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/ 
-                                                           
-  */
-  
+   _____ _    ____ _____ _     _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
+  |  ___/ \  / ___|_   _| |   | ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
+  | |_ / _ \ \___ \ | | | |   |  _| | | | | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
+  |  _/ ___ \ ___) || | | |___| |___| |_| | |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
+  |_|/_/   \_\____/ |_| |_____|_____|____/  |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
+
+*/
+//----------------------------------------------------
+//Még nem használtam fel
 void gradientRedGreen() {
   fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
 
@@ -129,21 +139,38 @@ void tripleBlueBlink() {
     delay(400);
   }
 }
+//----------------------------------------------------
+void FillLEDsFromPaletteColors( ){
+  uint8_t brightness = 255;
+  int paletteStep=(int)256/NUM_LEDS;
+  //currentBlending = NOBLEND;
+  currentBlending = LINEARBLEND;
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = ColorFromPalette( currentPalette, i*paletteStep , brightness, currentBlending);
+
+
+  }
+}
+
+void all_off() {
+  fill_solid( leds, NUM_LEDS, CRGB::Black);
+}
 
 void rainbow()
 {
   // FastLED's built-in rainbow generator
-  fill_rainbow( leds, NUM_LEDS, gHue, 7);
+  //fill_rainbow( leds, NUM_LEDS, gHue, 7);
+  FillLEDsFromPaletteColors();
 }
 
 void bpm()
 {
   // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
   uint8_t BeatsPerMinute = 62;
-  CRGBPalette16 palette = PartyColors_p;
+
   uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
   for ( int i = 0; i < NUM_LEDS; i++) { //9948
-    leds[i] = ColorFromPalette(palette, gHue + (i * 2), beat - gHue + (i * 10));
+    leds[i] = ColorFromPalette(currentPalette, gHue + (i * 2), beat - gHue + (i * 10));
   }
 }
 
@@ -154,13 +181,13 @@ void bpm()
 /**************FastLED FUNCTIONS END******************************/
 
 /*
- _____ ___ _____  _      _____ _   _ _   _  ____ _____ ___ ___  _   _ ____  
-|  ___/ _ \_   _|/ \    |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___| 
-| |_ | | | || | / _ \   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \ 
-|  _|| |_| || |/ ___ \  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-|_|   \___/ |_/_/   \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/ 
-                                                                            
- */
+  _____ ___ _____  _      _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
+  |  ___/ _ \_   _|/ \    |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
+  | |_ | | | || | / _ \   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
+  |  _|| |_| || |/ ___ \  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
+  |_|   \___/ |_/_/   \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
+
+*/
 void checkForUpdates() {
 
   String fwURL = String( fwUrlBase );
@@ -236,17 +263,17 @@ void checkForUpdates() {
 /**************FOTA FUNCTIONS END******************************/
 
 /*
- __  __  ___ _____ _____   _____ _   _ _   _  ____ _____ ___ ___  _   _ ____  
-|  \/  |/ _ \_   _|_   _| |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___| 
-| |\/| | | | || |   | |   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \ 
-| |  | | |_| || |   | |   |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-|_|  |_|\__\_\|_|   |_|   |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/ 
-                                                                              
- */
+   __  __  ___ _____ _____   _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
+  |  \/  |/ _ \_   _|_   _| |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
+  | |\/| | | | || |   | |   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
+  | |  | | |_| || |   | |   |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
+  |_|  |_|\__\_\|_|   |_|   |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
+
+*/
 //Subscribe function
 void subscribeToTopics() {
 
-//Note: multible subscription will not work without client.loop();
+  //Note: multible subscription will not work without client.loop();
 
   client.subscribe(TOPIC_DEV_COMMAND);
   Serial.println("Subscribed to [" TOPIC_DEV_COMMAND "] topic");
@@ -283,7 +310,7 @@ void subscribeToTopics() {
   client.loop();
   client.subscribe(TOPIC_ALL_BRIGHTNESS);
   Serial.println("Subscribed to [" TOPIC_ALL_BRIGHTNESS "] topic");
-  
+
 
 
 
@@ -363,39 +390,50 @@ void callback(char* topic, byte * payload, unsigned int length) {
 
 /*
 
- __  __ _____ ____ ____    _    ____ _____   ____  ____   ___   ____ _____ ____ ____  
-|  \/  | ____/ ___/ ___|  / \  / ___| ____| |  _ \|  _ \ / _ \ / ___| ____/ ___/ ___| 
-| |\/| |  _| \___ \___ \ / _ \| |  _|  _|   | |_) | |_) | | | | |   |  _| \___ \___ \ 
-| |  | | |___ ___) |__) / ___ \ |_| | |___  |  __/|  _ <| |_| | |___| |___ ___) |__) |
-|_|  |_|_____|____/____/_/   \_\____|_____| |_|   |_| \_\\___/ \____|_____|____/____/ 
-                                                                                      
- */
+  __  __ _____ ____ ____    _    ____ _____   ____  ____   ___   ____ _____ ____ ____
+  |  \/  | ____/ ___/ ___|  / \  / ___| ____| |  _ \|  _ \ / _ \ / ___| ____/ ___/ ___|
+  | |\/| |  _| \___ \___ \ / _ \| |  _|  _|   | |_) | |_) | | | | |   |  _| \___ \___ \
+  | |  | | |___ ___) |__) / ___ \ |_| | |___  |  __/|  _ <| |_| | |___| |___ ___) |__) |
+  |_|  |_|_____|____/____/_/   \_\____|_____| |_|   |_| \_\\___/ \____|_____|____/____/
+
+*/
 
 
 void processRecMessage() {
 
-bool validContent=false;
-  if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
+  bool validContent = false;
 
+  //FASTLED BRANCH
+  if (strcmp(recTopic, TOPIC_DEV_FASTLED) == 0) {
+    validContent = true;
+    Serial.println(TOPIC_DEV_FASTLED " branch");
+    LEDMode = atoi(recMsg);
+    Serial.printf("LED mode: %d\n", LEDMode);
+  }
+
+
+  // COMMAND BRANCH
+  if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
+    validContent = true;
     //Serial.println(TOPIC_DEV_COMMAND " branch");
     if (strcmp(recMsg, "getfw") == 0) {
-      validContent=true;
+      validContent = true;
       publishMyFW();
     }
     if (strcmp(recMsg, "getip") == 0) {
-      validContent=true;
+      validContent = true;
       publishMyIP();
     }
     if (strcmp(recMsg, "getsketchsize") == 0) {
-      validContent=true;
+      validContent = true;
       publishMySketchSize();
     }
     if (strcmp(recMsg, "getfreesize") == 0) {
-      validContent=true;
+      validContent = true;
       publishMyFreeSize();
     }
-        if (strcmp(recMsg, "getfreeheap") == 0) {
-          validContent=true;
+    if (strcmp(recMsg, "getfreeheap") == 0) {
+      validContent = true;
       publishMyHeap();
     }
 
@@ -404,17 +442,19 @@ bool validContent=false;
       delay(1000);
       ESP.restart();
     }
-
   }
+
+  //FOTA BRANCH
+
   if (strcmp(recTopic, TOPIC_DEV_FOTA) == 0 || strcmp(recTopic, TOPIC_ALL_FOTA) == 0) {
 
     if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
-      validContent=true;
+      validContent = true;
       checkForUpdates();
     }
 
   }
-  
+
   if (!validContent) Serial.println("Not a valid content");
   msgReceived = false;
 }
@@ -423,13 +463,13 @@ bool validContent=false;
 
 /*
 
- _   _ _____ _     ____  _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____  
-| | | | ____| |   |  _ \| ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___| 
-| |_| |  _| | |   | |_) |  _| | |_) | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \ 
-|  _  | |___| |___|  __/| |___|  _ <  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-|_| |_|_____|_____|_|   |_____|_| \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/ 
-                                                                                          
- */
+  _   _ _____ _     ____  _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
+  | | | | ____| |   |  _ \| ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
+  | |_| |  _| | |   | |_) |  _| | |_) | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
+  |  _  | |___| |___|  __/| |___|  _ <  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
+  |_| |_|_____|_____|_|   |_____|_| \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
+
+*/
 
 boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
 {
@@ -460,13 +500,13 @@ void flip()
 
 /*
 
- ____  _____ _____ _   _ ____  
-/ ___|| ____|_   _| | | |  _ \ 
-\___ \|  _|   | | | | | | |_) |
- ___) | |___  | | | |_| |  __/ 
-|____/|_____| |_|  \___/|_|    
-                               
- */
+  ____  _____ _____ _   _ ____
+  / ___|| ____|_   _| | | |  _ \
+  \___ \|  _|   | | | | | | |_) |
+  ___) | |___  | | | |_| |  __/
+  |____/|_____| |_|  \___/|_|
+
+*/
 
 void setup()
 {
@@ -502,17 +542,20 @@ void setup()
   FastLED.setBrightness(MAX_BRIGHTNESS);
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
 
+  Serial.printf("Number of FastLED modes: %d\n", _LAST_);
+  Serial.println();
+
 }
 
 /*
 
- __  __    _    ___ _   _   _     ___   ___  ____  
-|  \/  |  / \  |_ _| \ | | | |   / _ \ / _ \|  _ \ 
-| |\/| | / _ \  | ||  \| | | |  | | | | | | | |_) |
-| |  | |/ ___ \ | || |\  | | |__| |_| | |_| |  __/ 
-|_|  |_/_/   \_\___|_| \_| |_____\___/ \___/|_|    
-                                                   
- */
+  __  __    _    ___ _   _   _     ___   ___  ____
+  |  \/  |  / \  |_ _| \ | | | |   / _ \ / _ \|  _ \
+  | |\/| | / _ \  | ||  \| | | |  | | | | | | | |_) |
+  | |  | |/ ___ \ | || |\  | | |__| |_| | |_| |  __/
+  |_|  |_/_/   \_\___|_| \_| |_____\___/ \___/|_|
+
+*/
 
 void loop() {
 
@@ -538,6 +581,8 @@ void loop() {
       strcpy(msg, "");
       if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         Serial.println("Client connected");
+        Serial.println();
+
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
 
@@ -559,14 +604,32 @@ void loop() {
     /**************CONNECT/RECONNECT SEQUENCE END ******************************/
 
 
+    /*
+
+       ____ ___  ____  _____
+      / ___/ _ \|  _ \| ____|
+      | |  | | | | |_) |  _|
+      | |__| |_| |  _ <| |___
+      \____\___/|_| \_\_____|
+
+    */
+
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
 
 
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
+    uint8_t maxChanges = 10;
+    nblendPaletteTowardPalette( currentPalette, targetPalette, maxChanges);
 
-    bpm();
+    // Set FastLED mode
+    switch (LEDMode) {
+      case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; break;
+      case RAINBOW: targetPalette = RainbowColors_p; rainbow(); break;
+      case BPM: targetPalette = PartyColors_p; bpm(); break;
+    }
+
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
 
@@ -582,7 +645,8 @@ void loop() {
     }
 
 
-  }
-}
+  } //WIFI STATUS == CONNECTED
+
+} //MAIN LOOP
 
 
