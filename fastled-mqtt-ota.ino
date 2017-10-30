@@ -469,6 +469,7 @@ void processRecMessage() {
       delay(500);
       ESP.restart();
     }
+    Serial.println(findAndConvertToInt("speed:"));
   }
 
   //FOTA BRANCH
@@ -484,6 +485,16 @@ void processRecMessage() {
 
   if (!validContent) Serial.println("Not a valid content");
   msgReceived = false;
+}
+
+int findAndConvertToInt(char *token){
+  char *found = strtok(recMsg,token);
+  if (found!=NULL){
+    Serial.print("found:");
+    Serial.println(found);
+    return atoi(found);
+  }
+  else return -9999;
 }
 
 /**************MESSAGE PROCESS FUNCTIONS END******************************/
@@ -664,7 +675,7 @@ void loop() {
 
 
     // insert a delay to keep the framerate modest
-    FastLED.delay(1000 / FRAMES_PER_SECOND);
+  //  FastLED.delay(1000 / FRAMES_PER_SECOND); //ettől instabil lesz????
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
