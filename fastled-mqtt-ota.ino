@@ -26,15 +26,22 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #include <ESP8266httpUpdate.h>
 #include <PubSubClient.h>
 #include <Ticker.h>
-#include <FastLED.h>
 
-#include <FastLED.h>
+
+
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
-//#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
+//FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülnek, és villódzás (flicker) lesz belőlük!!!
+//Ez főleg a NEOPIXEL mátrix és LED szalagok esetében van így
+//Ekkor viszont lefagy. Tehát vagy flicker, vagy lefagyás, ha a szalagot használjuk. A LED füzér nem villódzik
+
+#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
 //Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
 #define FASTLED_INTERRUPT_RETRY_COUNT 3
+#include <FastLED.h>
+
+
 #define LED_PIN     5
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
@@ -49,8 +56,13 @@ const uint8_t kMatrixWidth  = 8;
 const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
+
+int FRAMES_PER_SECOND = 100; // here you can control the speed.
+int speed = 15; //defines generic animation speed
+uint8_t blendSpeed = 10; //defines palette cross-blend speed
 
 
 // The leds
@@ -60,8 +72,8 @@ CRGBPalette16 currentPalette( CRGB::Black );
 CRGBPalette16 targetPalette( CRGB::Black );
 TBlendType    currentBlending;
 
-#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
-#define FRAMES_PER_SECOND  100    // here you can control the speed. 
+#define MILLI_AMPERE      1000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+
 
 
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
@@ -106,7 +118,12 @@ unsigned long wifiCheckTimer;
 // Replace with the IP address of your MQTT server
 IPAddress mqttServerIP(192, 168, 1, 1);
 
-Ticker flipper;
+Ticker flipper; //for blinking built-in LED to show wifi and MQTT status
+
+bool blinkStatus = false;
+bool errorStatus = false;
+bool gHueRoll = false; //indicates if gHue roll is activated
+
 
 WiFiClient wclient;
 PubSubClient client(wclient);
@@ -129,9 +146,9 @@ void gradientRedGreen() {
 
 }
 
-void tripleBlueBlink() {
+void tripleBlink(CRGB color) {
   for (int j = 0; j < 3; j++) {
-    fill_solid( leds, NUM_LEDS, CRGB::Blue);
+    fill_solid( leds, NUM_LEDS, color);
     FastLED.show();
     delay(100);
     fill_solid( leds, NUM_LEDS, CRGB::Black);
@@ -140,13 +157,13 @@ void tripleBlueBlink() {
   }
 }
 //----------------------------------------------------
-void FillLEDsFromPaletteColors( ){
+void FillLEDsFromPaletteColors( ) {
   uint8_t brightness = 255;
-  int paletteStep=(int)256/NUM_LEDS;
+  int paletteStep = (int)256 / NUM_LEDS;
   //currentBlending = NOBLEND;
   currentBlending = LINEARBLEND;
   for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = ColorFromPalette( currentPalette, i*paletteStep , brightness, currentBlending);
+    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, currentBlending);
 
 
   }
@@ -201,7 +218,7 @@ void checkForUpdates() {
   Serial.print( "Firmware version URL: " );
   Serial.println( fwVersionURL );
   //Blink three times with BLUE color to show the checking phase
-  tripleBlueBlink();
+  tripleBlink(CRGB::Blue);
 
   HTTPClient httpClient;
   httpClient.begin( fwVersionURL );
@@ -417,7 +434,7 @@ void processRecMessage() {
     validContent = true;
     //Serial.println(TOPIC_DEV_COMMAND " branch");
     if (strcmp(recMsg, "getfw") == 0) {
-       tripleBlueBlink();
+      tripleBlink(CRGB::Blue);
       validContent = true;
       publishMyFW();
     }
@@ -437,10 +454,18 @@ void processRecMessage() {
       validContent = true;
       publishMyHeap();
     }
+    if (strcmp(recMsg, "error") == 0) {
+      errorStatus = true;
+
+    }
+    if (strcmp(recMsg, "noerror") == 0) {
+      errorStatus = false;
+
+    }
 
     if (strcmp(recMsg, "reboot") == 0) {
       Serial.println("Rebooting...");
-      tripleBlueBlink();
+      tripleBlink(CRGB::Blue);
       delay(500);
       ESP.restart();
     }
@@ -498,6 +523,23 @@ void flip()
 }
 
 
+void blinkErrorLED(CRGB color) {
+  //blinks the first LED according to the requested color
+  EVERY_N_MILLISECONDS( 1000 ) {
+
+    blinkStatus = !blinkStatus;
+  }
+  if (errorStatus) {
+    if (blinkStatus) {
+      leds[0] = color;
+    }
+    else {
+      leds[0] = CRGB::Black;
+    }
+  }
+}
+
+
 /**************OTHER FUNCTIONS END******************************/
 
 /*
@@ -546,6 +588,7 @@ void setup()
 
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
+
 
 }
 
@@ -622,17 +665,26 @@ void loop() {
 
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
-    uint8_t maxChanges = 10;
-    nblendPaletteTowardPalette( currentPalette, targetPalette, maxChanges);
+
+    // do some periodic updates
+    EVERY_N_MILLISECONDS( 20 ) {
+      //gHue++;  // slowly cycle the "base color" through the rainbow
+      if (gHueRoll) gHue = gHue + (int)speed / 5;
+    }
+
+    nblendPaletteTowardPalette( currentPalette, targetPalette, blendSpeed);
 
     // Set FastLED mode
     switch (LEDMode) {
-      case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; break;
-      case RAINBOW: targetPalette = RainbowColors_p; rainbow(); break;
-      case BPM: targetPalette = PartyColors_p; bpm(); break;
+      case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
+      case RAINBOW: targetPalette = RainbowColors_p; rainbow(); gHueRoll = true; break;
+      case BPM: targetPalette = PartyColors_p; bpm(); gHueRoll = false; break;
     }
 
     // send the 'leds' array out to the actual LED strip
+
+    blinkErrorLED(CRGB::Red); //blink the first LED in case of error
+
     FastLED.show();
 
     //Handle keypresses
