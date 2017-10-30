@@ -36,9 +36,9 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 //Ez főleg a NEOPIXEL mátrix és LED szalagok esetében van így
 //Ekkor viszont lefagy. Tehát vagy flicker, vagy lefagyás, ha a szalagot használjuk. A LED füzér nem villódzik
 
-#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
+//#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
 //Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
-#define FASTLED_INTERRUPT_RETRY_COUNT 3
+//#define FASTLED_INTERRUPT_RETRY_COUNT 3
 #include <FastLED.h>
 
 
@@ -60,7 +60,7 @@ uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-int FRAMES_PER_SECOND = 100; // here you can control the speed.
+int FRAMES_PER_SECOND = 20; // here you can control the speed.
 int speed = 15; //defines generic animation speed
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
 
@@ -110,6 +110,10 @@ char msg[50];
 char topic[50];
 char recMsg[50];
 char recTopic[50];
+char recCommand[10];
+char recValue[10];
+
+
 boolean msgReceived; //shows if message received
 char digitTemp[3];
 unsigned long wifiCheckTimer;
@@ -422,11 +426,41 @@ void processRecMessage() {
 
   //FASTLED BRANCH
   if (strcmp(recTopic, TOPIC_DEV_FASTLED) == 0) {
-    validContent = true;
+    strcpy(recCommand, "");
+    strcpy(recValue, "");
     Serial.println(TOPIC_DEV_FASTLED " branch");
-    LEDMode = atoi(recMsg);
-    Serial.printf("LED mode: %d\n", LEDMode);
-  }
+
+    char *found = strtok(recMsg, ":");  //find the first part before the ":"
+    if (found != NULL) { //if found...
+      strcpy(recCommand, found);
+      found = strtok(NULL, ":"); //find the second part
+      if (found != NULL) {
+        validContent = true;
+        strcpy(recValue, found);
+      }
+    }
+
+    if (strcmp(recCommand, "ledmode") == 0) {
+      LEDMode = atoi(recValue);
+      Serial.printf("ledmode:%d\n", LEDMode);
+
+    }
+
+    if (strcmp(recCommand, "speed") == 0) {
+      speed = atoi(recValue);
+      Serial.printf("brightness:%d\n", speed);
+
+    }
+
+    if (strcmp(recCommand, "brightness") == 0) {
+      MAX_BRIGHTNESS = atoi(recValue);
+      Serial.printf("speed:%d\n", MAX_BRIGHTNESS);
+      FastLED.setBrightness(MAX_BRIGHTNESS);
+    }
+
+
+
+  }//END OF FASTLED BRANCH
 
 
   // COMMAND BRANCH
@@ -469,8 +503,8 @@ void processRecMessage() {
       delay(500);
       ESP.restart();
     }
-    Serial.println(findAndConvertToInt("speed:"));
-  }
+
+  }// END OF COMMAND BRANCH
 
   //FOTA BRANCH
 
@@ -481,21 +515,12 @@ void processRecMessage() {
       checkForUpdates();
     }
 
-  }
+  }//END OF FOTA BRANCH
 
   if (!validContent) Serial.println("Not a valid content");
   msgReceived = false;
 }
 
-int findAndConvertToInt(char *token){
-  char *found = strtok(recMsg,token);
-  if (found!=NULL){
-    Serial.print("found:");
-    Serial.println(found);
-    return atoi(found);
-  }
-  else return -9999;
-}
 
 /**************MESSAGE PROCESS FUNCTIONS END******************************/
 
@@ -675,7 +700,7 @@ void loop() {
 
 
     // insert a delay to keep the framerate modest
-  //  FastLED.delay(1000 / FRAMES_PER_SECOND); //ettől instabil lesz????
+    FastLED.delay(1000 / FRAMES_PER_SECOND); //ettől instabil lesz????
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
