@@ -32,14 +32,10 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 
 //Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
-//FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülnek, és villódzás (flicker) lesz belőlük!!!
-//Ez főleg a NEOPIXEL mátrix és LED szalagok esetében van így
-//Ekkor viszont lefagy. Tehát vagy flicker, vagy lefagyás, ha a szalagot használjuk. A LED füzér nem villódzik
-
-//#define FASTLED_ALLOW_INTERRUPTS 0  //ki kell kommentelni, ha fényfüzérről van szó. A LED szalaghoz és NEOPIXEL mátrixhoz kell, különben van flicker
-//Megfigyelés: ha ki van kommentelve, akkor úgy tűnik, megy az OTA...
-//#define FASTLED_INTERRUPT_RETRY_COUNT 3
+//FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülne
+#define FASTLED_INTERRUPT_RETRY_COUNT 0 //to avoid flickering
 #include <FastLED.h>
+// Another line is needed at setup to avoid Wifi sleep
 
 
 #define LED_PIN     5
@@ -614,6 +610,8 @@ void setup()
   //  connectWifi();
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
+
+ // WiFi.setSleepMode(WIFI_NONE_SLEEP); //avoid wifi sleep to get rid of flickering AND wifi issues
 
   msgReceived = false;
 
