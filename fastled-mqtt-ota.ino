@@ -146,8 +146,8 @@ int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
 // This function sets up a palette of purple and green stripes.
 void SetFavoritePalette1()
 {
-  CRGB orange = CHSV( 28, 255, 255);
-  CRGB cyan  = CHSV( 132, 255, 255);
+  CRGB orange = CHSV( 20, 255, 255);
+  CRGB cyan  = CHSV( 110, 255, 255);
   CRGB black  = CRGB::Black;
 
   targetPalette = CRGBPalette16(
@@ -180,13 +180,13 @@ void tripleBlink(CRGB color) {
   }
 }
 
-void steady(int from,int to,CRGB color) {
-  //fill_solid( leds, NUM_LEDS, CRGB::Black);//Erase previous pattern
-  int fromLED=(from<0)?0:from;
-  int toLED=(to>NUM_LEDS)?NUM_LEDS:to;
+void steady(int from, int to, CRGB color) {
   
-  for(int i=fromLED;i<toLED+1;i++){
-    leds[i]=color;
+  int fromLED = (from < 0) ? 0 : from;
+  int toLED = (to > NUM_LEDS) ? NUM_LEDS : to;
+
+  for (int i = fromLED; i < toLED + 1; i++) {
+    leds[i] = color;
   }
 
 }
@@ -206,6 +206,7 @@ void FillLEDsFromPaletteColors( ) {
 void all_off() {
   fill_solid( leds, NUM_LEDS, CRGB::Black);
 }
+
 
 void rainbow()
 {
@@ -551,33 +552,41 @@ void processRecMessage() {
 
   if (strcmp(recTopic, TOPIC_DEV_TEST) == 0) {
     Serial.println(TOPIC_DEV_TEST " branch");
-    strcpy(recValue, "");
+    if (strcmp(recMsg, "clear") == 0) {
+      validContent = true;
+     LEDMode=OFF;
+       
+      Serial.println("test clear");
+    }
+    else
+    { //if the message is not "clear", check the content
+      strcpy(recValue, "");
 
-    //try to find segments separated by ":"
-    char *found = strtok(recMsg, ":");  //find the first part before the ":"
-    if (found != NULL) { //if found...
-      strcpy(recValue, found);
-      testFrom = atoi(recValue);
-
-      found = strtok(NULL, ":"); //find the second part
-      if (found != NULL) {
-        strcpy(recValue, "");
-
+      //try to find segments separated by ":"
+      char *found = strtok(recMsg, ":");  //find the first part before the ":"
+      if (found != NULL) { //if found...
         strcpy(recValue, found);
-        testTo = atoi(recValue);
+        testFrom = atoi(recValue);
 
-        found = strtok(NULL, ":"); //find the third part
+        found = strtok(NULL, ":"); //find the second part
         if (found != NULL) {
           strcpy(recValue, "");
-          validContent = true;
+
           strcpy(recValue, found);
-          testHue = atoi(recValue);
-          Serial.printf("test from:%d to:%d hue:%d\n", testFrom, testTo, testHue);
-          LEDMode=TEST;
+          testTo = atoi(recValue);
+
+          found = strtok(NULL, ":"); //find the third part
+          if (found != NULL) {
+            strcpy(recValue, "");
+            validContent = true;
+            strcpy(recValue, found);
+            testHue = atoi(recValue);
+            Serial.printf("test from:%d to:%d hue:%d\n", testFrom, testTo, testHue);
+            LEDMode = TEST;
+          }
         }
       }
     }
-
   }//END OF TEST BRANCH
 
   //FOTA BRANCH
@@ -789,11 +798,11 @@ void loop() {
     // Set FastLED mode
     switch (LEDMode) {
       case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
-      case STEADY: gHueRoll = false; steady(0,NUM_LEDS,CHSV(0, 255, 255)); break;
+      case STEADY: gHueRoll = false; steady(0, NUM_LEDS-1, CHSV(0, 255, 255)); break;
       case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow();  break;
       case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm();  break;
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
-      case TEST: gHueRoll = false; steady(testFrom,testTo,CHSV(testHue,255,255));  break;
+      case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, 255, 255));  break;
     }
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
