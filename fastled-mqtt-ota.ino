@@ -14,10 +14,8 @@
 
 
 #include <MD_KeySwitch.h>
-
 const uint8_t SWITCH_PIN = 0;       // switch connected to this pin
 const uint8_t SWITCH_ACTIVE = LOW;  // digital signal when switch is pressed 'on'
-
 MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 
 #include <ESP8266WiFi.h>
@@ -35,44 +33,30 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 //FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülne
 #define FASTLED_INTERRUPT_RETRY_COUNT 0 //to avoid flickering
 #include <FastLED.h>
-// Another line is needed at setup to avoid Wifi sleep
+// Another line is needed at setup to avoid Wifi sleep in the setup section: WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
 
 #define LED_PIN     5
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int MAX_BRIGHTNESS =  32;
-
-enum {OFF, RAINBOW, BPM, ALARM, STEADY, TEST1, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
-int LEDMode = OFF;
+int MAX_BRIGHTNESS =  20;
 
 
+
+// If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
 const uint8_t kMatrixWidth  = 8;
 const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+
 
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-int FRAMES_PER_SECOND = 20; // here you can control the speed.
-int speed = 15; //defines generic animation speed
-uint8_t blendSpeed = 10; //defines palette cross-blend speed
-
-
-// The leds
-CRGB leds[kMatrixWidth * kMatrixHeight];
-
-CRGBPalette16 currentPalette( CRGB::Black );
-CRGBPalette16 targetPalette( CRGB::Black );
-TBlendType    currentBlending;
-
 #define MILLI_AMPERE      1000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
-
-
-
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
+
+
 #define RETAINED true
 
 const int FW_VERSION = 1001;
@@ -120,9 +104,7 @@ IPAddress mqttServerIP(192, 168, 1, 1);
 
 Ticker flipper; //for blinking built-in LED to show wifi and MQTT status
 
-bool blinkStatus = false;
-bool errorStatus = false;
-bool gHueRoll = false; //indicates if gHue roll is activated
+
 
 
 WiFiClient wclient;
@@ -137,14 +119,55 @@ PubSubClient client(wclient);
   |_|/_/   \_\____/ |_| |_____|_____|____/  |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
 
 */
+
+// VARIABLES
+
+enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+int LEDMode = OFF;
+
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the speed itself
+int speed = 15; //defines generic animation speed
+uint8_t blendSpeed = 10; //defines palette cross-blend speed
+
+CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
+CRGBPalette16 currentPalette( CRGB::Black ); //black palette
+CRGBPalette16 targetPalette( CRGB::Black );  //black palette
+TBlendType    currentBlending;
+
+bool errorStatus = false;  //indicates if there is a need for error indication (by a blinink first LED in RED)
+bool blinkStatus = false;  //indicates the status of the first blinking LED
+bool gHueRoll = false; //indicates if gHue roll is activated
+
+int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
+
+// PALETTES
+
+// This function sets up a palette of purple and green stripes.
+void SetFavoritePalette1()
+{
+  CRGB orange = CHSV( 28, 255, 255);
+  CRGB cyan  = CHSV( 132, 255, 255);
+  CRGB black  = CRGB::Black;
+
+  targetPalette = CRGBPalette16(
+                    cyan,  cyan,  cyan,  cyan,
+                    orange, orange,  orange, orange,
+                    cyan,  cyan,  cyan,  cyan,
+                    orange, orange,  orange, orange );
+}
+
+
 //----------------------------------------------------
 //Még nem használtam fel
 void gradientRedGreen() {
   fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
 
   FastLED.show();
-
+  //ugyanezt az is megcsinálja, hogy összesen két színt teszünk a palettára. És átfolyatja egymásba a színeket
 }
+
+//----------------------------------------------------
 
 void tripleBlink(CRGB color) {
   for (int j = 0; j < 3; j++) {
@@ -156,7 +179,18 @@ void tripleBlink(CRGB color) {
     delay(100);
   }
 }
-//----------------------------------------------------
+
+void steady(int from,int to,CRGB color) {
+  //fill_solid( leds, NUM_LEDS, CRGB::Black);//Erase previous pattern
+  int fromLED=(from<0)?0:from;
+  int toLED=(to>NUM_LEDS)?NUM_LEDS:to;
+  
+  for(int i=fromLED;i<toLED+1;i++){
+    leds[i]=color;
+  }
+
+}
+
 void FillLEDsFromPaletteColors( ) {
   uint8_t brightness = 255;
   int paletteStep = (int)256 / NUM_LEDS;
@@ -191,7 +225,17 @@ void bpm()
   }
 }
 
+void move()
+{
+  uint8_t brightness = 255;
+  int paletteStep = (int)256 / NUM_LEDS;
+  currentBlending = NOBLEND;
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, currentBlending);
 
+
+  }
+}
 
 
 
@@ -426,6 +470,7 @@ void processRecMessage() {
     strcpy(recValue, "");
     Serial.println(TOPIC_DEV_FASTLED " branch");
 
+    //try to find segments separated by ":"
     char *found = strtok(recMsg, ":");  //find the first part before the ":"
     if (found != NULL) { //if found...
       strcpy(recCommand, found);
@@ -435,7 +480,7 @@ void processRecMessage() {
         strcpy(recValue, found);
       }
     }
-
+    //If found, process it
     if (strcmp(recCommand, "ledmode") == 0) {
       LEDMode = atoi(recValue);
       Serial.printf("ledmode:%d\n", LEDMode);
@@ -444,13 +489,13 @@ void processRecMessage() {
 
     if (strcmp(recCommand, "speed") == 0) {
       speed = atoi(recValue);
-      Serial.printf("brightness:%d\n", speed);
+      Serial.printf("speed:%d\n", speed);
 
     }
 
     if (strcmp(recCommand, "brightness") == 0) {
       MAX_BRIGHTNESS = atoi(recValue);
-      Serial.printf("speed:%d\n", MAX_BRIGHTNESS);
+      Serial.printf("brightness:%d\n", MAX_BRIGHTNESS);
       FastLED.setBrightness(MAX_BRIGHTNESS);
     }
 
@@ -462,7 +507,7 @@ void processRecMessage() {
   // COMMAND BRANCH
   if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
     validContent = true;
-    //Serial.println(TOPIC_DEV_COMMAND " branch");
+    Serial.println(TOPIC_DEV_COMMAND " branch");
     if (strcmp(recMsg, "getfw") == 0) {
       tripleBlink(CRGB::Blue);
       validContent = true;
@@ -501,6 +546,39 @@ void processRecMessage() {
     }
 
   }// END OF COMMAND BRANCH
+
+  //TEST BRANCH
+
+  if (strcmp(recTopic, TOPIC_DEV_TEST) == 0) {
+    Serial.println(TOPIC_DEV_TEST " branch");
+    strcpy(recValue, "");
+
+    //try to find segments separated by ":"
+    char *found = strtok(recMsg, ":");  //find the first part before the ":"
+    if (found != NULL) { //if found...
+      strcpy(recValue, found);
+      testFrom = atoi(recValue);
+
+      found = strtok(NULL, ":"); //find the second part
+      if (found != NULL) {
+        strcpy(recValue, "");
+
+        strcpy(recValue, found);
+        testTo = atoi(recValue);
+
+        found = strtok(NULL, ":"); //find the third part
+        if (found != NULL) {
+          strcpy(recValue, "");
+          validContent = true;
+          strcpy(recValue, found);
+          testHue = atoi(recValue);
+          Serial.printf("test from:%d to:%d hue:%d\n", testFrom, testTo, testHue);
+          LEDMode=TEST;
+        }
+      }
+    }
+
+  }//END OF TEST BRANCH
 
   //FOTA BRANCH
 
@@ -611,7 +689,7 @@ void setup()
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
 
- // WiFi.setSleepMode(WIFI_NONE_SLEEP); //avoid wifi sleep to get rid of flickering AND wifi issues
+  // WiFi.setSleepMode(WIFI_NONE_SLEEP); //avoid wifi sleep to get rid of flickering AND wifi issues
 
   msgReceived = false;
 
@@ -698,7 +776,7 @@ void loop() {
 
 
     // insert a delay to keep the framerate modest
-    FastLED.delay(1000 / FRAMES_PER_SECOND); //ettől instabil lesz????
+    FastLED.delay(1000 / FRAMES_PER_SECOND);
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
@@ -711,14 +789,15 @@ void loop() {
     // Set FastLED mode
     switch (LEDMode) {
       case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
-      case RAINBOW: targetPalette = RainbowColors_p; rainbow(); gHueRoll = true; break;
-      case BPM: targetPalette = PartyColors_p; bpm(); gHueRoll = false; break;
+      case STEADY: gHueRoll = false; steady(0,NUM_LEDS,CHSV(0, 255, 255)); break;
+      case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow();  break;
+      case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm();  break;
+      case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
+      case TEST: gHueRoll = false; steady(testFrom,testTo,CHSV(testHue,255,255));  break;
     }
 
-    // send the 'leds' array out to the actual LED strip
-
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
-
+    // send the 'leds' array out to the actual LED strip
     FastLED.show();
 
     //Handle keypresses
