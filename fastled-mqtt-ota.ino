@@ -126,9 +126,10 @@ enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TEST, TEST2, _LAST_}; //stores the
 int LEDMode = OFF;
 
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
-int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the speed itself
-int speed = 15; //defines generic animation speed
-uint8_t blendSpeed = 10; //defines palette cross-blend speed
+int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
+int globalSpeed = 15; //defines generic animation speed
+int globalSaturation = 255;
+uint8_t blendSpeed = 10; //defines palette cross-blend globalSpeed
 
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
@@ -158,6 +159,19 @@ void SetFavoritePalette1()
 }
 
 
+
+void pastelizeColors() {
+  //handles the saturation
+  //adds proportion of WHITE tint depending on the globalSaturation number
+  //makes similar behavior to HSV saturation variable, but in case of palette coloring, there is no such possibility
+  for ( int i = 0; i < NUM_LEDS; i++) {
+  leds[i] += CRGB(255-globalSaturation,255-globalSaturation,255-globalSaturation);
+
+
+
+  }
+}
+
 //----------------------------------------------------
 //Még nem használtam fel
 void gradientRedGreen() {
@@ -181,7 +195,7 @@ void tripleBlink(CRGB color) {
 }
 
 void steady(int from, int to, CRGB color) {
-  
+
   int fromLED = (from < 0) ? 0 : from;
   int toLED = (to > NUM_LEDS) ? NUM_LEDS : to;
 
@@ -488,9 +502,9 @@ void processRecMessage() {
 
     }
 
-    if (strcmp(recCommand, "speed") == 0) {
-      speed = atoi(recValue);
-      Serial.printf("speed:%d\n", speed);
+    if (strcmp(recCommand, "globalSpeed") == 0) {
+      globalSpeed = atoi(recValue);
+      Serial.printf("globalSpeed:%d\n", globalSpeed);
 
     }
 
@@ -498,6 +512,14 @@ void processRecMessage() {
       MAX_BRIGHTNESS = atoi(recValue);
       Serial.printf("brightness:%d\n", MAX_BRIGHTNESS);
       FastLED.setBrightness(MAX_BRIGHTNESS);
+    }
+
+    if (strcmp(recCommand, "saturation") == 0) {
+      globalSaturation = atoi(recValue);
+      if (globalSaturation>255) globalSaturation=255;
+      if (globalSaturation<0) globalSaturation=0;
+      Serial.printf("saturation:%d\n", globalSaturation);
+
     }
 
 
@@ -554,8 +576,8 @@ void processRecMessage() {
     Serial.println(TOPIC_DEV_TEST " branch");
     if (strcmp(recMsg, "clear") == 0) {
       validContent = true;
-     LEDMode=OFF;
-       
+      LEDMode = OFF;
+
       Serial.println("test clear");
     }
     else
@@ -790,7 +812,7 @@ void loop() {
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
       //gHue++;  // slowly cycle the "base color" through the rainbow
-      if (gHueRoll) gHue = gHue + (int)speed / 5;
+      if (gHueRoll) gHue = gHue + (int)globalSpeed / 5;
     }
 
     nblendPaletteTowardPalette( currentPalette, targetPalette, blendSpeed);
@@ -798,13 +820,13 @@ void loop() {
     // Set FastLED mode
     switch (LEDMode) {
       case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
-      case STEADY: gHueRoll = false; steady(0, NUM_LEDS-1, CHSV(0, 255, 255)); break;
-      case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow();  break;
-      case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm();  break;
-      case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
-      case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, 255, 255));  break;
+      case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); break;
+      case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); break;
+      case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
+      case MOVE: gHueRoll = false; SetFavoritePalette1(); move();pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
+      case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
     }
-
+    
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
