@@ -36,7 +36,10 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 // Another line is needed at setup to avoid Wifi sleep in the setup section: WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
 
-#define LED_PIN     5
+#define LED_PIN1     5
+#define LED_PIN2     6
+#define LED_PIN3     7 
+
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
@@ -45,8 +48,8 @@ int MAX_BRIGHTNESS =  20;
 
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 8;
-const uint8_t kMatrixHeight = 8;
+const uint8_t kMatrixWidth  = 1;
+const uint8_t kMatrixHeight = 45;
 const bool    kMatrixSerpentineLayout = false;
 
 
@@ -725,7 +728,10 @@ void setup()
   msgReceived = false;
 
   delay(300); //safety delay
-  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+ // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+ // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  
   FastLED.setBrightness(MAX_BRIGHTNESS);
   set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
 
