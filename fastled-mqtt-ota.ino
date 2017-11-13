@@ -75,12 +75,10 @@ const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should b
 #define TOPIC_DEV_ALARM "/device/" ALIAS "/alarm"
 #define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
 #define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
-#define TOPIC_DEV_BRIGHTNESS "/device/" ALIAS "/brightness"
 
 #define TOPIC_ALL_ALARM "/all/alarm"
 #define TOPIC_ALL_FOTA "/all/fota"
 #define TOPIC_ALL_RGB "/all/rgb"
-#define TOPIC_ALL_BRIGHTNESS "/all/brightness"
 
 const char* ssid = "testm";
 const char* password = "12345678";
@@ -375,9 +373,6 @@ void subscribeToTopics() {
   client.subscribe(TOPIC_DEV_RGB);
   Serial.println("Subscribed to [" TOPIC_DEV_RGB "] topic");
   client.loop();
-  client.subscribe(TOPIC_DEV_BRIGHTNESS);
-  Serial.println("Subscribed to [" TOPIC_DEV_BRIGHTNESS "] topic");
-  client.loop();
   client.subscribe(TOPIC_ALL_ALARM);
   Serial.println("Subscribed to [" TOPIC_ALL_ALARM "] topic");
   client.loop();
@@ -386,9 +381,7 @@ void subscribeToTopics() {
   client.loop();
   client.subscribe(TOPIC_ALL_RGB);
   Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_BRIGHTNESS);
-  Serial.println("Subscribed to [" TOPIC_ALL_BRIGHTNESS "] topic");
+
 
 
 
