@@ -38,7 +38,7 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 
 #define LED_PIN1     5
 #define LED_PIN2     6
-#define LED_PIN3     7 
+#define LED_PIN3     7
 
 #define LED_TYPE    WS2812
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
@@ -49,7 +49,7 @@ int MAX_BRIGHTNESS =  20;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
 const uint8_t kMatrixWidth  = 1;
-const uint8_t kMatrixHeight = 45;
+const uint8_t kMatrixHeight = 32;
 const bool    kMatrixSerpentineLayout = false;
 
 
@@ -125,6 +125,7 @@ PubSubClient client(wclient);
 
 enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
+int prevLEDMode = OFF;
 
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
@@ -166,7 +167,7 @@ void pastelizeColors() {
   //adds proportion of WHITE tint depending on the globalSaturation number
   //makes similar behavior to HSV saturation variable, but in case of palette coloring, there is no such possibility
   for ( int i = 0; i < NUM_LEDS; i++) {
-  leds[i] += CRGB(255-globalSaturation,255-globalSaturation,255-globalSaturation);
+    leds[i] += CRGB(255 - globalSaturation, 255 - globalSaturation, 255 - globalSaturation);
 
 
 
@@ -512,8 +513,8 @@ void processRecMessage() {
 
     if (strcmp(recCommand, "saturation") == 0) {
       globalSaturation = atoi(recValue);
-      if (globalSaturation>255) globalSaturation=255;
-      if (globalSaturation<0) globalSaturation=0;
+      if (globalSaturation > 255) globalSaturation = 255;
+      if (globalSaturation < 0) globalSaturation = 0;
       Serial.printf("saturation:%d\n", globalSaturation);
 
     }
@@ -656,7 +657,8 @@ void flip()
 {
   int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
   digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
-
+  if (state) leds[0] = CRGB::Blue; else leds[0] = CRGB::Black;
+  FastLED.show();
 }
 
 
@@ -691,6 +693,15 @@ void blinkErrorLED(CRGB color) {
 
 void setup()
 {
+  all_off(); //Clear the LED array
+  delay(500); //safety delay
+  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+
+  FastLED.setBrightness(MAX_BRIGHTNESS);
+  set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
+
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
@@ -720,13 +731,7 @@ void setup()
 
   msgReceived = false;
 
-  delay(300); //safety delay
-  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
- // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
- // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  
-  FastLED.setBrightness(MAX_BRIGHTNESS);
-  set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
+
 
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
@@ -752,7 +757,11 @@ void loop() {
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
+    if (LEDMode != OFF) prevLEDMode = LEDMode;
+    LEDMode = OFF;
+    FastLED.setBrightness(5);
     flipper.attach(0.1, flip); //blink quickly during wifi connection
+
     if (WiFi.waitForConnectResult() != WL_CONNECTED)
       return;
     Serial.println("WiFi connected");
@@ -762,6 +771,10 @@ void loop() {
 
     if (!client.connected()) {
       Serial.println("Connecting mqtt client...");
+
+      if (LEDMode != OFF) prevLEDMode = LEDMode; //preserve the previous mode if not already OFF
+      LEDMode = OFF;
+      FastLED.setBrightness(5); //set a dimmed value
       flipper.attach(0.25, flip); //blink slower during client connection
 
       //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
@@ -770,6 +783,9 @@ void loop() {
         Serial.println("Client connected");
         Serial.println();
 
+
+        LEDMode = prevLEDMode; //restore the previous LEDMode
+        FastLED.setBrightness(MAX_BRIGHTNESS); //restore the MAX_BRIGHTNESS
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
 
@@ -822,10 +838,10 @@ void loop() {
       case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); break;
       case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); break;
       case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
-      case MOVE: gHueRoll = false; SetFavoritePalette1(); move();pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
+      case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
     }
-    
+
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
     // send the 'leds' array out to the actual LED strip
     FastLED.show();
