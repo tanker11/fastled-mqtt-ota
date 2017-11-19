@@ -40,7 +40,7 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #define LED_PIN2     6
 #define LED_PIN3     7
 
-#define LED_TYPE    WS2812
+#define LED_TYPE    WS2811
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
 int MAX_BRIGHTNESS =  20;
@@ -49,7 +49,7 @@ int MAX_BRIGHTNESS =  20;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
 const uint8_t kMatrixWidth  = 1;
-const uint8_t kMatrixHeight = 32;
+const uint8_t kMatrixHeight = 65;
 const bool    kMatrixSerpentineLayout = false;
 
 
@@ -123,7 +123,7 @@ PubSubClient client(wclient);
 
 // VARIABLES
 
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, AMBERBLINK, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
 
@@ -160,6 +160,24 @@ void SetFavoritePalette1()
                     orange, orange,  orange, orange );
 }
 
+//Traffic light color palette definition
+
+CRGB trafficRed = CHSV( 0, 255, 255);
+CRGB trafficAmber = CHSV( 15, 255, 255);
+CRGB trafficGreen = CHSV( 110, 255, 255);
+CRGB Black  = CRGB::Black;
+
+//Color indeces
+//0-15 RED
+//16-31 AMBER
+//32-47 GREEN
+//48-255 BLACK
+
+CRGBPalette16 trafficLightPalette = CRGBPalette16(
+                                      trafficRed,  trafficAmber,  trafficGreen,  Black,
+                                      Black, Black, Black,  Black,
+                                      Black,  Black,  Black,  Black,
+                                      Black, Black, Black,  Black );
 
 
 void pastelizeColors() {
@@ -204,8 +222,72 @@ void steady(int from, int to, CRGB color) {
   for (int i = fromLED; i < toLED + 1; i++) {
     leds[i] = color;
   }
-
 }
+
+/****************************************************************************
+   Trafficlight CLASS
+
+
+
+ ****************************************************************************/
+#define lightMaxNumLEDs NUM_LEDS
+#define dimSpeedUp 40
+#define dimSpeedDown 25
+#define maxDim 250
+#define minDim 0 //light level of ON and OFF state (dimming will be done between the values
+
+class trafficLight
+{
+  public:
+    boolean blinkState = true;
+    int LEDArraySize;
+    int elementLEDs[lightMaxNumLEDs]; //az egyes lámpákat reprezentáló LED-ek tömbje
+    short LEDColorIndex;
+    short elementDim = 0; //dim values for the element
+    bool blinkStatus=false;
+
+    void setElements (int *ledArray, int arraySize, int colorIndex) { //passing the array of LEDs and set basic params
+      LEDColorIndex = colorIndex;
+      Serial.println(arraySize);
+      if (arraySize > lightMaxNumLEDs) arraySize = lightMaxNumLEDs;
+      LEDArraySize = arraySize;
+      for (int i = 0; i < arraySize; i++) {
+        elementLEDs[i] = ledArray[i];
+        Serial.print(ledArray[i]);
+        Serial.print(" ");
+      }
+      Serial.println();
+    }
+
+    void On() {
+      if (elementDim + dimSpeedUp >= maxDim) {
+        //ha a következő lépésben elérjük, vagy közel érünk a maximumhoz, akkor befixáljuk maximumra, és jelezzük, hogy kész
+        elementDim = maxDim;
+      } else {
+        elementDim += dimSpeedUp;
+      }
+      processLEDBrightness();
+    }
+
+    void Off() {
+      if (elementDim - dimSpeedDown <= minDim) {
+        elementDim = minDim;
+      } else {
+        elementDim -= dimSpeedDown;
+      }
+      processLEDBrightness();
+    }
+
+    void processLEDBrightness() {
+      for (int currentLED = 0; currentLED < LEDArraySize; currentLED++) {
+        leds[elementLEDs[currentLED]] = ColorFromPalette( trafficLightPalette, LEDColorIndex , elementDim, LINEARBLEND);
+      }
+    }
+};
+
+
+
+//**********************************-Trafficlight cass vége
 
 void FillLEDsFromPaletteColors( ) {
   uint8_t brightness = 255;
@@ -690,6 +772,8 @@ void blinkErrorLED(CRGB color) {
   |____/|_____| |_|  \___/|_|
 
 */
+//Class instances
+trafficLight *myAmberLight;
 
 void setup()
 {
@@ -736,6 +820,12 @@ void setup()
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
 
+
+  myAmberLight = new trafficLight();
+  //AMBER light init
+  int amberLightLEDs[] = {2, 3, 10, 11};
+  int amberArrSize(sizeof(amberLightLEDs) / sizeof(amberLightLEDs[0]));
+  myAmberLight->setElements(amberLightLEDs, amberArrSize, 16);
 
 }
 
@@ -840,6 +930,14 @@ void loop() {
       case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
+      case AMBERBLINK: gHueRoll = false;
+        if (blinkStatus) {
+          myAmberLight->On();
+        } else   myAmberLight->Off();
+        EVERY_N_MILLISECONDS( 800 ) {
+          myAmberLight->blinkStatus =!myAmberLight->blinkStatus;
+   
+        }; break;
     }
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
