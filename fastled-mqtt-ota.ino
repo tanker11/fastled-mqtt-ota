@@ -244,7 +244,7 @@ class trafficLight
     int elementLEDs[lightMaxNumLEDs]; //az egyes lámpákat reprezentáló LED-ek tömbje
     short LEDColorIndex;
     short elementDim = 0; //dim values for the element
-    bool blinkStatus=false;
+    
 
     void setElements (int *ledArray, int arraySize, int colorIndex) { //passing the array of LEDs and set basic params
       LEDColorIndex = colorIndex;
@@ -931,11 +931,11 @@ void loop() {
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
       case AMBERBLINK: gHueRoll = false;
-        if (blinkStatus) {
+        if (myAmberLight->blinkState) {
           myAmberLight->On();
         } else   myAmberLight->Off();
         EVERY_N_MILLISECONDS( 800 ) {
-          myAmberLight->blinkStatus =!myAmberLight->blinkStatus;
+          myAmberLight->blinkState =!myAmberLight->blinkState;
    
         }; break;
     }
