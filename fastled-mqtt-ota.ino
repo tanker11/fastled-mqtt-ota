@@ -139,7 +139,7 @@ CRGBPalette16 targetPalette( CRGB::Black );  //black palette
 TBlendType    currentBlending;
 
 bool errorStatus = false;  //indicates if there is a need for error indication (by a blinink first LED in RED)
-bool blinkStatus = false;  //indicates the status of the first blinking LED
+bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
 bool gHueRoll = false; //indicates if gHue roll is activated
 
 int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
@@ -236,27 +236,29 @@ void steady(int from, int to, CRGB color) {
 #define maxDim 250
 #define minDim 0 //light level of ON and OFF state (dimming will be done between the values
 
-class trafficLight
+
+
+
+
+
+
+
+class steadyLight
 {
   public:
-    boolean blinkState = true;
-    int LEDArraySize;
-    int elementLEDs[lightMaxNumLEDs]; //az egyes lámpákat reprezentáló LED-ek tömbje
+    boolean blinkStatus = true;
+    //int LEDArraySize;
+    int fromLED, toLED; //stores the start and end point of the range of LEDs this instance handles
+    //int elementLEDs[lightMaxNumLEDs]; //az egyes lámpákat reprezentáló LED-ek tömbje
     short LEDColorIndex;
     short elementDim = 0; //dim values for the element
-    
 
-    void setElements (int *ledArray, int arraySize, int colorIndex) { //passing the array of LEDs and set basic params
+
+    void setElements (int from, int to, int colorIndex) { //set basic parameters
       LEDColorIndex = colorIndex;
-      Serial.println(arraySize);
-      if (arraySize > lightMaxNumLEDs) arraySize = lightMaxNumLEDs;
-      LEDArraySize = arraySize;
-      for (int i = 0; i < arraySize; i++) {
-        elementLEDs[i] = ledArray[i];
-        Serial.print(ledArray[i]);
-        Serial.print(" ");
-      }
-      Serial.println();
+      fromLED = from;
+      toLED = to;
+
     }
 
     void On() {
@@ -279,8 +281,8 @@ class trafficLight
     }
 
     void processLEDBrightness() {
-      for (int currentLED = 0; currentLED < LEDArraySize; currentLED++) {
-        leds[elementLEDs[currentLED]] = ColorFromPalette( trafficLightPalette, LEDColorIndex , elementDim, LINEARBLEND);
+      for (int currentLED = fromLED; currentLED < toLED; currentLED++) {
+        leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , elementDim, LINEARBLEND);
       }
     }
 };
@@ -748,10 +750,10 @@ void blinkErrorLED(CRGB color) {
   //blinks the first LED according to the requested color
   EVERY_N_MILLISECONDS( 1000 ) {
 
-    blinkStatus = !blinkStatus;
+    errorBlinkStatus = !errorBlinkStatus;
   }
   if (errorStatus) {
-    if (blinkStatus) {
+    if (errorBlinkStatus) {
       leds[0] = color;
     }
     else {
@@ -772,8 +774,8 @@ void blinkErrorLED(CRGB color) {
   |____/|_____| |_|  \___/|_|
 
 */
-//Class instances
-trafficLight *myAmberLight;
+
+steadyLight *myAmberLight;
 
 void setup()
 {
@@ -820,12 +822,11 @@ void setup()
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
 
+  myAmberLight = new steadyLight();
+  myAmberLight->setElements(0, NUM_LEDS-1, 16); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
 
-  myAmberLight = new trafficLight();
-  //AMBER light init
-  int amberLightLEDs[] = {2, 3, 10, 11};
-  int amberArrSize(sizeof(amberLightLEDs) / sizeof(amberLightLEDs[0]));
-  myAmberLight->setElements(amberLightLEDs, amberArrSize, 16);
+
+
 
 }
 
@@ -931,13 +932,13 @@ void loop() {
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
       case AMBERBLINK: gHueRoll = false;
-        if (myAmberLight->blinkState) {
-          myAmberLight->On();
-        } else   myAmberLight->Off();
+        if (myAmberLight->blinkStatus) myAmberLight->On();
+        if (!myAmberLight->blinkStatus) myAmberLight->Off();
         EVERY_N_MILLISECONDS( 800 ) {
-          myAmberLight->blinkState =!myAmberLight->blinkState;
-   
-        }; break;
+          myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
+        };
+        break;
+
     }
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
