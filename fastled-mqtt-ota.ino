@@ -232,33 +232,33 @@ void steady(int from, int to, CRGB color) {
  ****************************************************************************/
 #define lightMaxNumLEDs NUM_LEDS
 #define dimSpeedUp 40
-#define dimSpeedDown 25
-#define maxDim 250
-#define minDim 0 //light level of ON and OFF state (dimming will be done between the values
-
-
-
-
-
-
-
+#define dimSpeedDown 40
+#define maxDim 255
+#define minDim 10 //mindim is the value where the blinking will drop to 0 if below
 
 class steadyLight
 {
   public:
     boolean blinkStatus = true;
-    //int LEDArraySize;
     int fromLED, toLED; //stores the start and end point of the range of LEDs this instance handles
-    //int elementLEDs[lightMaxNumLEDs]; //az egyes lámpákat reprezentáló LED-ek tömbje
     short LEDColorIndex;
     short elementDim = 0; //dim values for the element
+    bool sinusoidal;
 
 
-    void setElements (int from, int to, int colorIndex) { //set basic parameters
+    void setElements (int from, int to, int colorIndex, bool sinus) { //set basic parameters
       LEDColorIndex = colorIndex;
       fromLED = from;
       toLED = to;
+      sinusoidal = sinus;
 
+    }
+
+    int saturateValue(int value) {
+      int saturated = value;
+      if (value < minDim) saturated = 0;
+      if (value > maxDim) saturated = maxDim;
+      return saturated;
     }
 
     void On() {
@@ -272,8 +272,8 @@ class steadyLight
     }
 
     void Off() {
-      if (elementDim - dimSpeedDown <= minDim) {
-        elementDim = minDim;
+      if (elementDim - dimSpeedDown <= -maxDim) {
+        elementDim = -maxDim;
       } else {
         elementDim -= dimSpeedDown;
       }
@@ -281,8 +281,25 @@ class steadyLight
     }
 
     void processLEDBrightness() {
-      for (int currentLED = fromLED; currentLED < toLED; currentLED++) {
-        leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , elementDim, LINEARBLEND);
+      /*
+         How this works: there is a "profile" of brightness, a curve. The curve is virtually moved upwards and downwards with an offset.
+         The result brightness is saturated at maxDim level.
+         The remanence brightness (very small values) are dropped to zero if they are below minDim level) see saturateValue() function above
+      */
+      for (int currentLED = fromLED; currentLED < toLED + 1; currentLED++) {
+        int posBrightness, scaled;
+
+        if (sinusoidal) { //in case you need the edges to be shaded with a sinusoidal curve
+         scaled = (currentLED-fromLED)*128/(toLED-fromLED); //scales to the sine waveform to the range of LEDs
+          posBrightness = sin8(scaled);
+
+
+          //scaled = (currentLED - fromLED) * 256 / (toLED - fromLED); //scales to the cubic waveform to the range of LEDs
+          //posBrightness = cubicwave8(scaled);
+
+        } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
+
+        leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
       }
     }
 };
@@ -823,7 +840,7 @@ void setup()
   Serial.println();
 
   myAmberLight = new steadyLight();
-  myAmberLight->setElements(0, NUM_LEDS-1, 16); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
+  myAmberLight->setElements(0, 63-16, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
 
 
 
