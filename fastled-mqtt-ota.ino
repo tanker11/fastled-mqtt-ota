@@ -56,7 +56,7 @@ const bool    kMatrixSerpentineLayout = false;
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      1000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      3840    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
@@ -126,6 +126,8 @@ PubSubClient client(wclient);
 enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, AMBERBLINK, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
+int almMode = 0; //global variable for the ALARM color index
+
 
 uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
@@ -225,7 +227,7 @@ void steady(int from, int to, CRGB color) {
 }
 
 /****************************************************************************
-   Trafficlight CLASS
+   steadyLight CLASS
 
 
 
@@ -252,6 +254,10 @@ class steadyLight
       toLED = to;
       sinusoidal = sinus;
 
+    }
+
+    void setColor (int colorIndex) { //set color only
+      LEDColorIndex = colorIndex;
     }
 
     int saturateValue(int value) {
@@ -290,7 +296,7 @@ class steadyLight
         int posBrightness, scaled;
 
         if (sinusoidal) { //in case you need the edges to be shaded with a sinusoidal curve
-         scaled = (currentLED-fromLED)*128/(toLED-fromLED); //scales to the sine waveform to the range of LEDs
+          scaled = (currentLED - fromLED) * 128 / (toLED - fromLED); //scales to the sine waveform to the range of LEDs
           posBrightness = sin8(scaled);
 
 
@@ -720,6 +726,29 @@ void processRecMessage() {
 
   }//END OF FOTA BRANCH
 
+
+  //ALARM BRANCH
+
+  if (strcmp(recTopic, TOPIC_DEV_ALARM) == 0 || strcmp(recTopic, TOPIC_ALL_ALARM) == 0) {
+    Serial.println("ALARM branch");
+    if (strcmp(recMsg, "off") == 0) { //command received for switching OFF blinking ALARM and go back to previous mode
+      LEDMode = prevLEDMode;
+      Serial.println("ALARM off");
+      Serial.printf("ledmode:%d\n", LEDMode);
+      validContent = true;
+    } else
+    {
+      Serial.printf("ALARM MODE:%d\n", atoi(recMsg));
+      if (LEDMode != ALARM) prevLEDMode = LEDMode;
+      LEDMode = ALARM;
+      almMode = atoi(recMsg);
+      Serial.printf("ledmode:%d\n", LEDMode);
+      validContent = true;
+    }
+
+
+  }//END OF ALARM BRANCH
+
   if (!validContent) Serial.println("Not a valid content");
   msgReceived = false;
 }
@@ -792,6 +821,7 @@ void blinkErrorLED(CRGB color) {
 
 */
 
+steadyLight *myAlarmLight;
 steadyLight *myAmberLight;
 
 void setup()
@@ -803,8 +833,8 @@ void setup()
   // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
 
   FastLED.setBrightness(MAX_BRIGHTNESS);
-  set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //5Volt LEDs
-
+  //set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //depreciated
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, MILLI_AMPERE); //5Volt LEDs
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
   Serial.println("Booting...");
@@ -839,8 +869,11 @@ void setup()
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
 
+  myAlarmLight = new steadyLight();
+  myAlarmLight->setElements(0, NUM_LEDS - 1, 0, true); //define all the LEDs for ALARM with RED color as a basis
+
   myAmberLight = new steadyLight();
-  myAmberLight->setElements(0, 63-16, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
+  myAmberLight->setElements(0, 63 - 16, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
 
 
 
@@ -948,6 +981,13 @@ void loop() {
       case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
+      case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
+        if (myAlarmLight->blinkStatus) myAlarmLight->On();
+        if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
+        EVERY_N_MILLISECONDS( 1000 ) {
+          myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
+        };
+        break;
       case AMBERBLINK: gHueRoll = false;
         if (myAmberLight->blinkStatus) myAmberLight->On();
         if (!myAmberLight->blinkStatus) myAmberLight->Off();
