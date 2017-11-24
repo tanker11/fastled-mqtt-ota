@@ -47,8 +47,8 @@ int MAX_BRIGHTNESS =  20;
 
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 1;
-const uint8_t kMatrixHeight = 64;
+const uint8_t kMatrixWidth  = 8;
+const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 
 
@@ -123,7 +123,7 @@ PubSubClient client(wclient);
 
 // VARIABLES
 
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, AMBERBLINK, TEST, TEST2, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, AMBERBLINK, NOISE, NOISE1, TEST, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
@@ -135,10 +135,25 @@ int globalSpeed = 50; //defines generic animation speed default
 int globalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
 
+// Scale determines how far apart the pixels in our noise matrix are.  Try
+// changing these values around to see how it affects the motion of the display.  The
+// higher the value of scale, the more "zoomed out" the noise will be.  A value
+// of 1 will be so zoomed in, you'll mostly see solid colors.
+// Megjegyzés: ezt használjuk már animációkban is (nem csak 1-10-ig), ott átszámoljuk a megfelelő skálára
+int scale = 20; // scale is set dynamically once we've started up
+int new_scale = 20;
+// The 16 bit version of our coordinates
+static uint16_t x;
+static uint16_t y;
+static uint16_t z;
+
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
 CRGBPalette16 targetPalette( CRGB::Black );  //black palette
 TBlendType    currentBlending;
+
+// This is the array that we keep our computed noise values in
+uint8_t noise[MAX_DIMENSION][MAX_DIMENSION];
 
 bool errorStatus = false;  //indicates if there is a need for error indication (by a blinink first LED in RED)
 bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
@@ -324,6 +339,10 @@ void FillLEDsFromPaletteColors( ) {
 }
 
 void all_off() {
+  fadeToBlackBy( leds, NUM_LEDS, blendSpeed);
+}
+
+void all_off_immediate() {
   fill_solid( leds, NUM_LEDS, CRGB::Black);
 }
 
@@ -358,7 +377,118 @@ void move()
   }
 }
 
+//NOISE FUNCTIONS-------------------------------------------------
+//
+// Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
+//
+uint16_t XY( uint8_t x, uint8_t y)
+{
+  uint16_t i;
+  if ( kMatrixSerpentineLayout == false) {
+    i = (y * kMatrixWidth) + x;
+  }
+  if ( kMatrixSerpentineLayout == true) {
+    if ( y & 0x01) {
+      // Odd rows run backwards
+      uint8_t reverseX = (kMatrixWidth - 1) - x;
+      i = (y * kMatrixWidth) + reverseX;
+    } else {
+      // Even rows run forwards
+      i = (y * kMatrixWidth) + x;
+    }
+  }
+  return i;
+}
+// Fill the x/y array of 8-bit noise values using the inoise8 function.
+void fillnoise8() {
+  // If we're runing at a low "speed", some 8-bit artifacts become visible
+  // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
+  // The amount of data smoothing we're doing depends on "speed".
+  uint8_t dataSmoothing = 0;
+  if ( globalSpeed < 50) {
+    dataSmoothing = 200 - (globalSpeed); //globalSpeed*4 volt itt
+  }
 
+  for (int i = 0; i < MAX_DIMENSION; i++) {
+    int ioffset = scale * i;
+    for (int j = 0; j < MAX_DIMENSION; j++) {
+      int joffset = scale * j;
+
+      uint8_t data = inoise8(x + ioffset, y + joffset, z);
+
+      // The range of the inoise8 function is roughly 16-238.
+      // These two operations expand those values out to roughly 0..255
+      // You can comment them out if you want the raw noise data.
+      data = qsub8(data, 16);
+      data = qadd8(data, scale8(data, 39));
+
+      if ( dataSmoothing ) {
+        uint8_t olddata = noise[i][j];
+        uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
+        data = newdata;
+      }
+
+      noise[i][j] = data;
+    }
+  }
+
+  //z += globalSpeed;
+  z += globalSpeed/8;
+
+  // apply slow drift to X and Y, just for visual variation.
+  //x += globalSpeed / 8;
+  x += globalSpeed / 64;
+  //y -= globalSpeed / 16;
+  y -= globalSpeed / 128;
+}
+
+void mapNoiseToLEDsUsingPalette()
+{
+  static uint8_t ihue = 0;
+
+  for (int i = 0; i < kMatrixWidth; i++) {
+    for (int j = 0; j < kMatrixHeight; j++) {
+      // We use the value at the (i,j) coordinate in the noise
+      // array for our brightness, and the flipped value from (j,i)
+      // for our pixel's index into the color palette.
+
+      uint8_t index = noise[j][i];
+      uint8_t bri =   noise[i][j];
+
+      // if this palette is a 'loop', add a slowly-changing base value
+      if ( gHueRoll) {
+        index += ihue;
+      }
+
+      // brighten up, as the color palette itself often contains the
+      // light/dark dynamic range desired
+      if ( bri > 127 ) {
+        bri = 255;
+      } else {
+        bri = dim8_raw( bri * 2);
+      }
+
+      CRGB color = ColorFromPalette( currentPalette, index, bri);
+      leds[XY(i, j)] = color;
+    }
+  }
+
+  ihue += 1;
+}
+
+
+void handleNoise(){
+
+    // generate noise data
+    fillnoise8();
+
+    // convert the noise data to colors in the LED array
+    // using the current palette
+    mapNoiseToLEDsUsingPalette();
+
+}
+
+//NOISE FUNCTIONS END------------------------------------------
 
 /**************FastLED FUNCTIONS END******************************/
 
@@ -717,9 +847,9 @@ void processRecMessage() {
     if (strcmp(recMsg, "prevmode") == 0) {
       validContent = true;
       if (prevLEDMode != ALARM) {
-        int tempMode=LEDMode;
+        int tempMode = LEDMode;
         LEDMode = prevLEDMode;
-        prevLEDMode=tempMode; //exchange LEDMode and prevLEDModes
+        prevLEDMode = tempMode; //exchange LEDMode and prevLEDModes
         Serial.printf("ledmode:%d\n", LEDMode);
       } else Serial.println("PREVIOUS MODE IS ALARM! NOT CHANGING");
 
@@ -897,7 +1027,7 @@ steadyLight *myAmberLight;
 
 void setup()
 {
-  all_off(); //Clear the LED array
+  all_off_immediate(); //Clear the LED array
   delay(500); //safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
   // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
@@ -944,7 +1074,7 @@ void setup()
   myAlarmLight->setElements(0, NUM_LEDS - 1, 0, true); //define all the LEDs for ALARM with RED color as a basis
 
   myAmberLight = new steadyLight();
-  myAmberLight->setElements(0, 63 - 16, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
+  myAmberLight->setElements(NUM_LEDS/3, NUM_LEDS*2/3, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
 
 
 }
@@ -1049,6 +1179,8 @@ void loop() {
       case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); break;
       case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
+      case NOISE: targetPalette = OceanColors_p; gHueRoll = true; scale = 25; handleNoise(); pastelizeColors(); break;
+      case NOISE1: targetPalette = LavaColors_p; gHueRoll = true; scale = 15; handleNoise(); pastelizeColors(); break;
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
       case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
         if (myAlarmLight->blinkStatus) myAlarmLight->On();
