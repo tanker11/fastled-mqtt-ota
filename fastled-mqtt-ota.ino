@@ -717,7 +717,9 @@ void processRecMessage() {
     if (strcmp(recMsg, "prevmode") == 0) {
       validContent = true;
       if (prevLEDMode != ALARM) {
+        int tempMode=LEDMode;
         LEDMode = prevLEDMode;
+        prevLEDMode=tempMode; //exchange LEDMode and prevLEDModes
         Serial.printf("ledmode:%d\n", LEDMode);
       } else Serial.println("PREVIOUS MODE IS ALARM! NOT CHANGING");
 
