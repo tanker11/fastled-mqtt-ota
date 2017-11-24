@@ -12,7 +12,6 @@
 
 */
 
-
 #include <MD_KeySwitch.h>
 const uint8_t SWITCH_PIN = 0;       // switch connected to this pin
 const uint8_t SWITCH_ACTIVE = LOW;  // digital signal when switch is pressed 'on'
@@ -49,7 +48,7 @@ int MAX_BRIGHTNESS =  20;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
 const uint8_t kMatrixWidth  = 1;
-const uint8_t kMatrixHeight = 65;
+const uint8_t kMatrixHeight = 64;
 const bool    kMatrixSerpentineLayout = false;
 
 
@@ -63,19 +62,20 @@ const bool    kMatrixSerpentineLayout = false;
 #define RETAINED true
 
 const int FW_VERSION = 1001;
-const char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
+char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
 #define ALIAS "alma"
 #define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
 #define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
-#define TOPIC_DEV_TEST "/device/" ALIAS "/test"
 #define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
+#define TOPIC_DEV_TEST "/device/" ALIAS "/test"
 #define TOPIC_DEV_FASTLED "/device/" ALIAS "/fastled"
 #define TOPIC_DEV_ALARM "/device/" ALIAS "/alarm"
 #define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
 #define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
 
+#define TOPIC_ALL_SETURL "/all/seturl"
 #define TOPIC_ALL_ALARM "/all/alarm"
 #define TOPIC_ALL_FOTA "/all/fota"
 #define TOPIC_ALL_RGB "/all/rgb"
@@ -129,11 +129,11 @@ int prevLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
 
 
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
-int globalSpeed = 15; //defines generic animation speed
+int globalSpeed = 50; //defines generic animation speed default
 int globalSaturation = 255;
-uint8_t blendSpeed = 10; //defines palette cross-blend globalSpeed
+uint8_t blendSpeed = 10; //defines palette cross-blend speed
 
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
@@ -194,16 +194,13 @@ void pastelizeColors() {
   }
 }
 
-//----------------------------------------------------
-//Még nem használtam fel
+
 void gradientRedGreen() {
   fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
 
   FastLED.show();
   //ugyanezt az is megcsinálja, hogy összesen két színt teszünk a palettára. És átfolyatja egymásba a színeket
 }
-
-//----------------------------------------------------
 
 void tripleBlink(CRGB color) {
   for (int j = 0; j < 3; j++) {
@@ -373,6 +370,8 @@ void move()
   |_|   \___/ |_/_/   \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
 
 */
+
+
 void checkForUpdates() {
 
   String fwURL = String( fwUrlBase );
@@ -409,10 +408,12 @@ void checkForUpdates() {
 
       //Publish FW found status
       client.publish(TOPIC_DEV_STATUS, "FW found, downloading");
+      gradientRedGreen();
 
       String fwImageURL = fwURL;
       fwImageURL.concat( ".bin" );
       Serial.println( "Update started." );
+      ESPhttpUpdate.rebootOnUpdate(false); //do not allow reboot after update so that we can feed back to the user
       t_httpUpdate_return ret = ESPhttpUpdate.update( fwImageURL );
 
       switch (ret) {
@@ -426,6 +427,14 @@ void checkForUpdates() {
           Serial.println("HTTP_UPDATE_NO_UPDATES");
           //Publish no HTTP update status
           client.publish(TOPIC_DEV_STATUS, "No HTTP updates");
+          break;
+
+        case HTTP_UPDATE_OK:
+          Serial.println("HTTP_UPDATE_SUCCESSFUL");
+          client.publish(TOPIC_DEV_STATUS, "HTTP update successful");
+          tripleBlink(CRGB::Green);
+          delay(1000);
+          ESP.restart();
           break;
       }
     }
@@ -489,12 +498,12 @@ void subscribeToTopics() {
   client.loop();
   client.subscribe(TOPIC_ALL_RGB);
   Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
-
-
-
-
-
+  client.loop();
+  client.subscribe(TOPIC_ALL_SETURL);
+  Serial.println("Subscribed to [" TOPIC_ALL_SETURL "] topic");
 }
+
+
 void publishMyIP() {
   //Publishing own IP on device/[alias]/ip/ topic
   IPAddress local = WiFi.localIP();
@@ -527,9 +536,31 @@ void publishMyHeap() {
 
 void publishMySketchSize() {
 
-  //Publishing own FW version on device/[alias]/fw/ topic
+  //Publishing own FW version on device/[alias]/status/ topic
   strcpy(msg, "");
   sprintf(msg, "SKETCH: %i", ESP.getSketchSize());
+  client.publish(TOPIC_DEV_STATUS, msg);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
+}
+
+
+void publishMyLEDmode() {
+
+  //Publishing current and previous LEDModes on device/[alias]/status/ topic
+  strcpy(msg, "");
+  sprintf(msg, "Current LEDMode: %i previous LEDMode: %i", LEDMode, prevLEDMode);
+  client.publish(TOPIC_DEV_STATUS, msg);
+  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
+
+}
+
+
+void publishMyURL() {
+
+  //Publishing actual FOTA URL on device/[alias]/status/ topic
+  strcpy(msg, "");
+  sprintf(msg, "FOTA URL: %s", fwUrlBase );
   client.publish(TOPIC_DEV_STATUS, msg);
   Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
 
@@ -601,14 +632,21 @@ void processRecMessage() {
     }
     //If found, process it
     if (strcmp(recCommand, "ledmode") == 0) {
-      LEDMode = atoi(recValue);
-      Serial.printf("ledmode:%d\n", LEDMode);
+      if (LEDMode != ALARM) { //If LEDMode is not ALARM, change the mode
+        prevLEDMode = LEDMode;
+        LEDMode = atoi(recValue);
+        Serial.printf("ledmode:%d\n", LEDMode);
+      } else { //if in ALARM mode, change the prevLEDMode instead, then it will go back to the new prevMode after the ALARM status
+        prevLEDMode = atoi(recValue);
+        Serial.println("IN ALARM! Changing the prevledmode");
+        Serial.printf("prevledmode:%d\n", prevLEDMode);
+      }
 
     }
 
-    if (strcmp(recCommand, "globalSpeed") == 0) {
+    if (strcmp(recCommand, "speed") == 0) {
       globalSpeed = atoi(recValue);
-      Serial.printf("globalSpeed:%d\n", globalSpeed);
+      Serial.printf("speed:%d\n", globalSpeed);
 
     }
 
@@ -656,14 +694,36 @@ void processRecMessage() {
       validContent = true;
       publishMyHeap();
     }
+
+    if (strcmp(recMsg, "getledmode") == 0) {
+      validContent = true;
+      publishMyLEDmode();
+    }
+
     if (strcmp(recMsg, "error") == 0) {
       errorStatus = true;
-
+      validContent = true;
     }
     if (strcmp(recMsg, "noerror") == 0) {
       errorStatus = false;
+      validContent = true;
+    }
+
+    if (strcmp(recMsg, "geturl") == 0) {
+      publishMyURL();
+      validContent = true;
+    }
+
+    if (strcmp(recMsg, "prevmode") == 0) {
+      validContent = true;
+      if (prevLEDMode != ALARM) {
+        LEDMode = prevLEDMode;
+        Serial.printf("ledmode:%d\n", LEDMode);
+      } else Serial.println("PREVIOUS MODE IS ALARM! NOT CHANGING");
 
     }
+
+
 
     if (strcmp(recMsg, "reboot") == 0) {
       Serial.println("Rebooting...");
@@ -725,6 +785,15 @@ void processRecMessage() {
     }
 
   }//END OF FOTA BRANCH
+
+  //SETURL BRANCH !!! NOTE:this can be for all devices! NOTE: any string is accepted
+  if (strcmp(recTopic, TOPIC_DEV_SETURL) == 0 || strcmp(recTopic, TOPIC_ALL_SETURL) == 0) {
+    strcpy(fwUrlBase, "");
+    strcpy(fwUrlBase, recMsg);
+    publishMyURL();
+    validContent = true;
+
+  }//END OF SETURL BRANCH
 
 
   //ALARM BRANCH
@@ -876,8 +945,6 @@ void setup()
   myAmberLight->setElements(0, 63 - 16, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
 
 
-
-
 }
 
 /*
@@ -968,7 +1035,7 @@ void loop() {
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
       //gHue++;  // slowly cycle the "base color" through the rainbow
-      if (gHueRoll) gHue = gHue + (int)globalSpeed / 5;
+      if (gHueRoll) gHue = gHue + globalSpeed / 10.00;
     }
 
     nblendPaletteTowardPalette( currentPalette, targetPalette, blendSpeed);
