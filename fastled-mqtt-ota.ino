@@ -47,9 +47,10 @@ int MAX_BRIGHTNESS =  20;
 
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 8;
-const uint8_t kMatrixHeight = 8;
+const uint8_t kMatrixWidth  = 1; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 60;
 const bool    kMatrixSerpentineLayout = false;
+const bool sinusoid = true;
 
 
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
@@ -123,7 +124,7 @@ PubSubClient client(wclient);
 
 // VARIABLES
 
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, AMBERBLINK, NOISE, NOISE1, TEST, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TRAFFICLIGHT, AMBERBLINK, NOISE, NOISE1, TEST, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
@@ -160,6 +161,10 @@ bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
 bool gHueRoll = false; //indicates if gHue roll is activated
 
 int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
+
+short tlStatusVar = 0; //Traffic light status variable 0:Red, 1:Red-Amber, 2: Green, 3: Amber
+unsigned long tlTimingLamp; //Traffic light timing before the next stage
+unsigned long tlMillis; //Timing millis for Traffic Light
 
 // PALETTES
 
@@ -433,7 +438,7 @@ void fillnoise8() {
   }
 
   //z += globalSpeed;
-  z += globalSpeed/8;
+  z += globalSpeed / 8;
 
   // apply slow drift to X and Y, just for visual variation.
   //x += globalSpeed / 8;
@@ -477,14 +482,14 @@ void mapNoiseToLEDsUsingPalette()
 }
 
 
-void handleNoise(){
+void handleNoise() {
 
-    // generate noise data
-    fillnoise8();
+  // generate noise data
+  fillnoise8();
 
-    // convert the noise data to colors in the LED array
-    // using the current palette
-    mapNoiseToLEDsUsingPalette();
+  // convert the noise data to colors in the LED array
+  // using the current palette
+  mapNoiseToLEDsUsingPalette();
 
 }
 
@@ -1023,7 +1028,9 @@ void blinkErrorLED(CRGB color) {
 */
 
 steadyLight *myAlarmLight;
+steadyLight *myRedLight;
 steadyLight *myAmberLight;
+steadyLight *myGreenLight;
 
 void setup()
 {
@@ -1071,10 +1078,14 @@ void setup()
   Serial.println();
 
   myAlarmLight = new steadyLight();
-  myAlarmLight->setElements(0, NUM_LEDS - 1, 0, true); //define all the LEDs for ALARM with RED color as a basis
+  myAlarmLight->setElements(0, NUM_LEDS - 1, 0, sinusoid); //define all the LEDs for ALARM with RED color as a basis
 
+  myRedLight = new steadyLight();
+  myRedLight->setElements(0, round((NUM_LEDS / 3) - 1), 0, sinusoid); //watch out for LED color index from the trafficLightPalette (red is on position 0)
   myAmberLight = new steadyLight();
-  myAmberLight->setElements(NUM_LEDS/3, NUM_LEDS*2/3, 16, true); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
+  myAmberLight->setElements(round(NUM_LEDS / 3), round((NUM_LEDS * 2 / 3) - 1), 16, sinusoid); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
+  myGreenLight = new steadyLight();
+  myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
 
 
 }
@@ -1190,11 +1201,55 @@ void loop() {
         };
         break;
       case AMBERBLINK: gHueRoll = false;
-        if (myAmberLight->blinkStatus) myAmberLight->On();
+        if (myAmberLight->blinkStatus) {
+          myAmberLight->On();
+          myRedLight->Off();
+          myGreenLight->Off();
+        }
         if (!myAmberLight->blinkStatus) myAmberLight->Off();
         EVERY_N_MILLISECONDS( 800 ) {
           myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
         };
+        break;
+      case TRAFFICLIGHT: gHueRoll = false;
+        if (isTimeout(tlMillis, tlTimingLamp)) {
+          tlMillis = millis();
+          tlStatusVar++;
+
+        }
+        if (tlStatusVar > 3) tlStatusVar = 0;
+        switch (tlStatusVar) {
+          case 0: {
+              myRedLight->On();
+              myAmberLight->Off();
+              myGreenLight->Off();
+              tlTimingLamp = 4000;
+            }
+            break;
+          case 1: {
+              myRedLight->On();
+              myAmberLight->On();
+              myGreenLight->Off();
+              tlTimingLamp = 2000;
+            }
+            break;
+          case 2: {
+              myRedLight->Off();
+              myAmberLight->Off();
+              myGreenLight->On();
+              tlTimingLamp = 4000;
+            }
+            break;
+          case 3: {
+              myRedLight->Off();
+              myAmberLight->On();
+              myGreenLight->Off();
+              tlTimingLamp = 2000;
+            }
+            break;
+
+        }
+
         break;
 
     }
