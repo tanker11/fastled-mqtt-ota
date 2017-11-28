@@ -84,7 +84,7 @@ char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uplo
 const char* ssid = "testm";
 const char* password = "12345678";
 const char* alias = ALIAS;
-const unsigned long connectRepeatTimer = 2000;
+const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
 
 String topicTemp; //topic string used ofr various publishes
@@ -1021,11 +1021,16 @@ void handleEmergency() {
   emergencyState++;
   if (emergencyState > 4) emergencyState = 0;
   switch (emergencyState) {
-    case 0: LEDMode=prevLEDMode;Serial.println("Emergency mode off"); FastLED.setBrightness(MAX_BRIGHTNESS); break;
-    case 1: if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode=EMERGENCY; Serial.println("Emergency mode 25%"); break;
-    case 2: Serial.println("Emergency mode 50%"); break;
-    case 3: Serial.println("Emergency mode 75%"); break;
-    case 4: Serial.println("Emergency mode 100%"); break;
+    case 0: LEDMode = prevLEDMode; Serial.println("Emergency mode off"); FastLED.setBrightness(MAX_BRIGHTNESS); break;
+    case 1: if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode = EMERGENCY; Serial.println("Emergency mode 25%"); break;
+    case 2:  if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode = EMERGENCY; Serial.println("Emergency mode 50%"); break;
+    case 3:  if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode = EMERGENCY; Serial.println("Emergency mode 75%"); break;
+    case 4:  if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode = EMERGENCY; Serial.println("Emergency mode 100%"); break;
+  }
+  if (emergencyState) {
+    fill_solid( leds, NUM_LEDS, CRGB::White);
+    FastLED.setBrightness(emergencyState * 64 - 1);
+    FastLED.show();
   }
 }
 
@@ -1034,7 +1039,7 @@ void handleKeypresses() {
   switch (S.read())
   {
     case MD_KeySwitch::KS_NULL:       /* Serial.println("NULL"); */   break;
-    case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS\n"); handleEmergency();
+    case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS\n"); handleEmergency(); break;
     case MD_KeySwitch::KS_DPRESS:     Serial.print("\nDOUBLE PRESS\n"); break;
     case MD_KeySwitch::KS_LONGPRESS:  Serial.print("\nLONG PRESS\n");   break;
     case MD_KeySwitch::KS_RPTPRESS:   Serial.print("\nREPEAT PRESS\n"); break;
@@ -1080,7 +1085,7 @@ void setup()
   S.enableLongPress(true);
   S.enableRepeat(false);
   S.enableRepeatResult(false);
-  S.setLongPressTime(2000);
+  S.setLongPressTime(3000);
   S.setDoublePressTime(1000);
 
 
@@ -1138,11 +1143,12 @@ void loop() {
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
-    if (LEDMode != OFF) prevLEDMode = LEDMode;
-    LEDMode = OFF;
-    FastLED.setBrightness(5);
-    flipper.attach(0.1, flip); //blink quickly during wifi connection
-
+    if (!emergencyState) {  //blinks only if not in emergency light mode
+      if (LEDMode != OFF) prevLEDMode = LEDMode;
+      LEDMode = OFF;
+      FastLED.setBrightness(5);
+      flipper.attach(0.1, flip); //blink quickly during wifi connection
+    }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -1150,12 +1156,12 @@ void loop() {
     if ((!client.connected()) && (isTimeout(wifiCheckTimer, connectRepeatTimer))) { //implement delay for retry here if not connected
       wifiCheckTimer = millis();
       Serial.println("Connecting mqtt client...");
-
-      if (LEDMode != OFF) prevLEDMode = LEDMode; //preserve the previous mode if not already OFF
-      LEDMode = OFF;
-      FastLED.setBrightness(5); //set a dimmed value
-      flipper.attach(0.25, flip); //blink slower during client connection
-
+      if (!emergencyState) {
+        if (LEDMode != OFF) prevLEDMode = LEDMode; //preserve the previous mode if not already OFF
+        LEDMode = OFF;
+        FastLED.setBrightness(5); //set a dimmed value
+        flipper.attach(0.25, flip); //blink slower during client connection
+      }
       //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
       strcpy(msg, "");
       if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
@@ -1220,7 +1226,7 @@ void loop() {
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case NOISE: targetPalette = OceanColors_p; gHueRoll = true; scale = 25; handleNoise(); pastelizeColors(); break;
       case NOISE1: targetPalette = LavaColors_p; gHueRoll = true; scale = 15; handleNoise(); pastelizeColors(); break;
-      case EMERGENCY: fill_solid( leds, NUM_LEDS, CRGB::White);gHueRoll=false;FastLED.setBrightness(emergencyState*64-1);break;
+      case EMERGENCY: /*Nothing to do here, handled separately*/ break;
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
       case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
         if (myAlarmLight->blinkStatus) myAlarmLight->On();
@@ -1285,6 +1291,7 @@ void loop() {
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
     // send the 'leds' array out to the actual LED strip
+
     FastLED.show();
 
 
