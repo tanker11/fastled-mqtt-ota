@@ -125,7 +125,7 @@ PubSubClient client(wclient);
 
 // VARIABLES
 
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TRAFFICLIGHT, AMBERBLINK, NOISE, NOISE1, TEST, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TRAFFICLIGHT, AMBERBLINK, NOISE, NOISE1, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
@@ -166,6 +166,8 @@ int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
 short tlStatusVar = 0; //Traffic light status variable 0:Red, 1:Red-Amber, 2: Green, 3: Amber
 unsigned long tlTimingLamp; //Traffic light timing before the next stage
 unsigned long tlMillis; //Timing millis for Traffic Light
+
+short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white all LEDs
 
 // PALETTES
 
@@ -1015,21 +1017,32 @@ void blinkErrorLED(CRGB color) {
   }
 }
 
+void handleEmergency() {
+  emergencyState++;
+  if (emergencyState > 4) emergencyState = 0;
+  switch (emergencyState) {
+    case 0: LEDMode=prevLEDMode;Serial.println("Emergency mode off"); FastLED.setBrightness(MAX_BRIGHTNESS); break;
+    case 1: if (LEDMode != EMERGENCY) prevLEDMode = LEDMode; LEDMode=EMERGENCY; Serial.println("Emergency mode 25%"); break;
+    case 2: Serial.println("Emergency mode 50%"); break;
+    case 3: Serial.println("Emergency mode 75%"); break;
+    case 4: Serial.println("Emergency mode 100%"); break;
+  }
+}
 
 void handleKeypresses() {
 
   switch (S.read())
   {
     case MD_KeySwitch::KS_NULL:       /* Serial.println("NULL"); */   break;
-    case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS"); break;
-    case MD_KeySwitch::KS_DPRESS:     Serial.print("\nDOUBLE PRESS"); break;
-    case MD_KeySwitch::KS_LONGPRESS:  Serial.print("\nLONG PRESS");   break;
-    case MD_KeySwitch::KS_RPTPRESS:   Serial.print("\nREPEAT PRESS"); break;
-    default:                          Serial.print("\nUNKNOWN");      break;
+    case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS\n"); handleEmergency();
+    case MD_KeySwitch::KS_DPRESS:     Serial.print("\nDOUBLE PRESS\n"); break;
+    case MD_KeySwitch::KS_LONGPRESS:  Serial.print("\nLONG PRESS\n");   break;
+    case MD_KeySwitch::KS_RPTPRESS:   Serial.print("\nREPEAT PRESS\n"); break;
+    default:                          Serial.print("\nUNKNOWN\n");      break;
   }
 }
 
-/**************OTHER FUNCTIONS END******************************/
+/**************HELPER FUNCTIONS END******************************/
 
 /*
 
@@ -1067,8 +1080,8 @@ void setup()
   S.enableLongPress(true);
   S.enableRepeat(false);
   S.enableRepeatResult(false);
-  S.setLongPressTime(1000);
-  S.setDoublePressTime(500);
+  S.setLongPressTime(2000);
+  S.setDoublePressTime(1000);
 
 
   Serial.println(__TIMESTAMP__);
@@ -1119,8 +1132,8 @@ void loop() {
   handleKeypresses();
 
   /**************CONNECT/RECONNECT SEQUENCE ******************************/
-  if ((WiFi.status() != WL_CONNECTED)&&(isTimeout(wifiCheckTimer, connectRepeatTimer))) {
-     wifiCheckTimer = millis();
+  if ((WiFi.status() != WL_CONNECTED) && (isTimeout(wifiCheckTimer, connectRepeatTimer))) {
+    wifiCheckTimer = millis();
     Serial.print("Connecting to ");
     Serial.print(ssid);
     Serial.println("...");
@@ -1207,6 +1220,7 @@ void loop() {
       case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
       case NOISE: targetPalette = OceanColors_p; gHueRoll = true; scale = 25; handleNoise(); pastelizeColors(); break;
       case NOISE1: targetPalette = LavaColors_p; gHueRoll = true; scale = 15; handleNoise(); pastelizeColors(); break;
+      case EMERGENCY: fill_solid( leds, NUM_LEDS, CRGB::White);gHueRoll=false;FastLED.setBrightness(emergencyState*64-1);break;
       case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
       case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
         if (myAlarmLight->blinkStatus) myAlarmLight->On();
