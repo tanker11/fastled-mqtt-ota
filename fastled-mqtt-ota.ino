@@ -8,7 +8,7 @@
   Ha ezen jön egy üzenet, hogy új FW elérhető, akkor ellenőrzi az elérési helyet, és ha minden OK, akkor letölti. Pl. ellenőrzi, hogy az üzenetben
   hirdetett FW verzió nagyobb-e a mostaninál, ás egyezik-e az elérhetővel. Ha minden OK, frissít. Ha nem, akkor visszaválaszol a serialon és MQTT-n
 
-
+  Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 */
 
@@ -24,9 +24,6 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #include <PubSubClient.h>
 #include <Ticker.h>
 
-
-//Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
-
 //FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülne
 #define FASTLED_INTERRUPT_RETRY_COUNT 0 //to avoid flickering
 #include <FastLED.h>
@@ -40,13 +37,11 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int MAX_BRIGHTNESS =  20;
-
-
+int MAX_BRIGHTNESS =  32;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 1; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 60;
+const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 const bool sinusoid = true;
 
@@ -79,12 +74,15 @@ char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uplo
 #define TOPIC_ALL_FOTA "/all/fota"
 #define TOPIC_ALL_RGB "/all/rgb"
 
+//WiFi variables
 const char* ssid = "testm";
 const char* password = "12345678";
 const char* alias = ALIAS;
 const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
-
+//MQTT variables
+// Replace with the IP address of your MQTT server
+IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -94,31 +92,27 @@ char recTopic[50];
 char recCommand[10];
 char recValue[10];
 
-
 boolean msgReceived; //shows if message received
 char digitTemp[3];
 unsigned long wifiCheckTimer;
 
-
-// Replace with the IP address of your MQTT server
-IPAddress mqttServerIP(192, 168, 1, 1);
-
+//General variables
 Ticker flipper; //for blinking built-in LED to show wifi and MQTT status
-
 WiFiClient wclient;
 PubSubClient client(wclient);
 
-// VARIABLES
+// FASTLED VARIABLES
 
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TRAFFICLIGHT, AMBERBLINK, NOISE, NOISE1, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, MOVE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, $$$_DIVIDER_$$$, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 int LEDMode = OFF;
 int prevLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
 
-
 float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
 int globalSpeed = 50; //defines generic animation speed default
+float speedMod; //modifies the speed factor according to the LEDMode
+float modifiedSpeed;
 int globalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
 
@@ -145,17 +139,38 @@ uint8_t noise[MAX_DIMENSION][MAX_DIMENSION];
 bool errorStatus = false;  //indicates if there is a need for error indication (by a blinink first LED in RED)
 bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
 bool gHueRoll = false; //indicates if gHue roll is activated
+uint8_t BeatsPerMinute = 80;
 
+//Variables for TEST mode
 int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
 
+//Variables for Traffic Light mode
 short tlStatusVar = 0; //Traffic light status variable 0:Red, 1:Red-Amber, 2: Green, 3: Amber
 unsigned long tlTimingLamp; //Traffic light timing before the next stage
 unsigned long tlMillis; //Timing millis for Traffic Light
 
+//Variable for emergency mode
 short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white all LEDs
 
-// PALETTES
+//Variables for Heart_Blood mode
+#define bloodHue  0  // Blood color [hue from 0-255]
+#define bloodSat  255  // Blood staturation [0-255]
+#define baseBrightness  0  // Brightness of LEDs when not pulsing. Set to 0 for off.
+#define flowDirection -1   // Use either 1 or -1 to set flow direction
+#define pulseFade 30  // How long the pulse takes to fade out.  Higher value is longer.
+#define pulseOffset 200  // Delay before second pulse in ms.  Higher value is more delay.
 
+//Variables for 3 LEDs wandering randomly
+int16_t positionA = NUM_LEDS * 2 / 6; // Set initial start position of A pixel
+int16_t positionB = NUM_LEDS * 3 / 6; // Set initial start position of B pixel
+int16_t positionC = NUM_LEDS * 4 / 6; // Set initial start position of C pixel
+int8_t deltaA = 1;           // Using a negative value will move pixels backwards.
+int8_t deltaB = 1;           // Using a negative value will move pixels backwards.
+int8_t deltaC = 1;           // Using a negative value will move pixels backwards.
+#define holdTime 80   // Milliseconds to hold position before advancing
+
+
+// FASTLED PALETTES
 // This function sets up a palette of purple and green stripes.
 void SetFavoritePalette1()
 {
@@ -168,6 +183,94 @@ void SetFavoritePalette1()
                     orange, orange,  orange, orange,
                     cyan,  cyan,  cyan,  cyan,
                     orange, orange,  orange, orange );
+}
+
+void setBlackAndWhiteStripedPalette()
+{
+  // 'black out' all 16 palette entries...
+  fill_solid( targetPalette, 16, CRGB::Black);
+  // and set every eighth one to white.
+  currentPalette[0] = CRGB::White;
+  // currentPalette[4] = CRGB::White;
+  currentPalette[8] = CRGB::White;
+  //  currentPalette[12] = CRGB::White;
+}
+
+void setRandomPalette(short numColors)
+{
+  EVERY_N_MILLISECONDS( 10000 ) { //new random palette every 10 seconds. Might have to wait for the first one to show up
+    // This function generates a random palette that's a gradient
+    // between four different colors.  The first is a dim hue, the second is
+    // a bright hue, the third is a bright pastel, and the last is
+    // another bright hue.  This gives some visual bright/dark variation
+    // which is more interesting than just a gradient of different hues.
+
+    CRGB black  = CRGB::Black;
+    CRGB random1, random2, random3;
+    switch (numColors) {
+      case 2:
+        random1 = CHSV( random8(), 255, 255);
+        random2 = CHSV( random8(), 255, 255);
+        random3 = black;
+        targetPalette = CRGBPalette16(
+                          random1, random1, black, black,
+                          random2, random2, black, random3,
+                          random1, random1, black, black,
+                          random2, random2, black, random3);
+        break;
+
+      case 3:
+        random1 = CHSV( random8(), 255, 255);
+        random2 = CHSV( random8(), 200, 100);
+        random3 = CHSV( random8(), 150, 200);
+        targetPalette = CRGBPalette16(
+                          random1, random1, black, black,
+                          random2, random2, black, random3,
+                          random1, random1, black, black,
+                          random2, random2, black, random3);
+        break;
+
+      case 4:
+        // This function generates a random palette that's a gradient
+        // between four different colors.  The first is a dim hue, the second is
+        // a bright hue, the third is a bright pastel, and the last is
+        // another bright hue.  This gives some visual bright/dark variation
+        // which is more interesting than just a gradient of different hues.
+
+        targetPalette = CRGBPalette16(
+                          CHSV( random8(), 255, 32),
+                          CHSV( random8(), 255, 255),
+                          CHSV( random8(), 128, 255),
+                          CHSV( random8(), 255, 255));
+
+        break;
+      default: //also for case 1:
+
+        random1 = CHSV( random8(), 255, 255);
+        random2 = black;
+        random3 = black;
+        targetPalette = CRGBPalette16(
+                          random1, random1, black, black,
+                          random2, random2, black, random3,
+                          random1, random1, black, black,
+                          random2, random2, black, random3);
+
+        break;
+    }
+
+
+  }
+}
+
+void setLightningPalette()
+{
+  // 'black out' all 16 palette entries...
+  fill_solid( targetPalette, 16, CRGB::Black);
+  // and set every eighth one to white.
+  currentPalette[0] = CRGB::White;
+  // currentPalette[4] = CRGB::White;
+  currentPalette[8] = CRGB::Aqua;
+  // currentPalette[12] = CRGB::White;
 }
 
 //Traffic light color palette definition
@@ -190,14 +293,8 @@ CRGBPalette16 trafficLightPalette = CRGBPalette16(
                                       Black,  Black,  Black,  Black,
                                       Black, Black, Black,  Black );
 
-
-
-
 /****************************************************************************
-   steadyLight CLASS
-
-
-
+   steadyLight CLASS for blinking alarm and trafficlights
  ****************************************************************************/
 #define lightMaxNumLEDs NUM_LEDS
 #define dimSpeedUp 40
@@ -214,13 +311,11 @@ class steadyLight
     short elementDim = 0; //dim values for the element
     bool sinusoidal;
 
-
     void setElements (int from, int to, int colorIndex, bool sinus) { //set basic parameters
       LEDColorIndex = colorIndex;
       fromLED = from;
       toLED = to;
       sinusoidal = sinus;
-
     }
 
     void setColor (int colorIndex) { //set color only
@@ -265,21 +360,15 @@ class steadyLight
         if (sinusoidal) { //in case you need the edges to be shaded with a sinusoidal curve
           scaled = (currentLED - fromLED) * 128 / (toLED - fromLED); //scales to the sine waveform to the range of LEDs
           posBrightness = sin8(scaled);
-
-
           //scaled = (currentLED - fromLED) * 256 / (toLED - fromLED); //scales to the cubic waveform to the range of LEDs
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
-
         leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
       }
     }
 };
 
-
-
-//**********************************-Trafficlight cass vége
 
 //####FastLED functions
 
@@ -330,7 +419,6 @@ void setup()
   S.setLongPressTime(3000);
   S.setDoublePressTime(1000);
 
-
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
   Serial.printf("Free size: %u\n", ESP.getFreeSketchSpace());
@@ -341,12 +429,9 @@ void setup()
   //  connectWifi();
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
-
   // WiFi.setSleepMode(WIFI_NONE_SLEEP); //avoid wifi sleep to get rid of flickering AND wifi issues
 
   msgReceived = false;
-
-
 
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
@@ -361,8 +446,7 @@ void setup()
   myGreenLight = new steadyLight();
   myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
 
-
-}
+} //****************END SETUP
 
 /*
 
@@ -409,8 +493,6 @@ void loop() {
       if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         Serial.println("Client connected");
         Serial.println();
-
-
         LEDMode = prevLEDMode; //restore the previous LEDMode
         FastLED.setBrightness(MAX_BRIGHTNESS); //restore the MAX_BRIGHTNESS
         flipper.detach();
@@ -418,9 +500,7 @@ void loop() {
 
         //Subscribe to topics
         subscribeToTopics();
-
         //Publish online status
-
         client.publish(TOPIC_DEV_STATUS, "online", RETAINED);
 
         publishMyIP();
@@ -447,96 +527,24 @@ void loop() {
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
 
-
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
       //gHue++;  // slowly cycle the "base color" through the rainbow
-      if (gHueRoll) gHue = gHue + globalSpeed / 10.00;
+      if (gHueRoll) gHue = gHue + modifiedSpeed / 10.00;
     }
 
     nblendPaletteTowardPalette( currentPalette, targetPalette, blendSpeed);
 
-    // Set FastLED mode
-    switch (LEDMode) {
-      case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
-      case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); break;
-      case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); break;
-      case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
-      case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
-      case NOISE: targetPalette = OceanColors_p; gHueRoll = true; scale = 25; handleNoise(); pastelizeColors(); break;
-      case NOISE1: targetPalette = LavaColors_p; gHueRoll = true; scale = 15; handleNoise(); pastelizeColors(); break;
-      case EMERGENCY: /*Nothing to do here, handled separately*/ break;
-      case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
-      case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
-        if (myAlarmLight->blinkStatus) myAlarmLight->On();
-        if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
-        EVERY_N_MILLISECONDS( 1000 ) {
-          myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
-        };
-        break;
-      case AMBERBLINK: gHueRoll = false;
-        if (myAmberLight->blinkStatus) {
-          myAmberLight->On();
-          myRedLight->Off();
-          myGreenLight->Off();
-        }
-        if (!myAmberLight->blinkStatus) myAmberLight->Off();
-        EVERY_N_MILLISECONDS( 800 ) {
-          myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
-        };
-        break;
-      case TRAFFICLIGHT: gHueRoll = false;
-        if (isTimeout(tlMillis, tlTimingLamp)) {
-          tlMillis = millis();
-          tlStatusVar++;
-
-        }
-        if (tlStatusVar > 3) tlStatusVar = 0;
-        switch (tlStatusVar) {
-          case 0: {
-              myRedLight->On();
-              myAmberLight->Off();
-              myGreenLight->Off();
-              tlTimingLamp = 8000;
-            }
-            break;
-          case 1: {
-              myRedLight->On();
-              myAmberLight->On();
-              myGreenLight->Off();
-              tlTimingLamp = 2000;
-            }
-            break;
-          case 2: {
-              myRedLight->Off();
-              myAmberLight->Off();
-              myGreenLight->On();
-              tlTimingLamp = 8000;
-            }
-            break;
-          case 3: {
-              myRedLight->Off();
-              myAmberLight->On();
-              myGreenLight->Off();
-              tlTimingLamp = 2000;
-            }
-            break;
-
-        }
-
-        break;
-
-    }
+    // Set FastLED mode based on LEDMode variable
+    setLEDMode();
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
-    // send the 'leds' array out to the actual LED strip
 
+    // send the 'leds' array out to the LED strip
     FastLED.show();
-
-
 
   } //WIFI STATUS == CONNECTED
 

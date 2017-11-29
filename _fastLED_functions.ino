@@ -1,3 +1,92 @@
+void setLEDMode() {
+  switch (LEDMode) {
+    case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; speedMod = 1; break;
+    case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); speedMod = 1; break;
+    case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); speedMod = 1; break;
+    case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; rainbowWithGlitter(); pastelizeColors(); speedMod = 1; break;
+    case GLITTERONLY: gHueRoll = false; speedMod = 4; glitterOnly();  break;
+    case CONFETTI: gHueRoll = true; scale = 5; speedMod = 0.1; confetti();  break;
+    case SINELON: gHueRoll = true; scale = 10; speedMod = 0.1; sinelon();  break;
+    case JUGGLE: gHueRoll = true; scale = 5; speedMod = 0.05; juggle();  break;
+    case HEARTBEAT: gHueRoll = false; scale = 20 ; heartBeat();  break;
+    case RND_WANDER: gHueRoll = false ; randomWander();  break;
+    case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); speedMod = 1; break;
+/*NINCS KÉSZ*/    case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); speedMod = 1; break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
+    case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scale = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_RND1: setRandomPalette(1); gHueRoll = false; scale = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;//1 color
+    case NOISE_RND2: setRandomPalette(2); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//2 colors
+    case NOISE_RND3: setRandomPalette(3); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_RND4: setRandomPalette(4); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scale = 15; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;
+  /*NINCS KÉSZ NEM NOISE LESZ*/    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scale = 1; speedMod = 3; handleNoise(); pastelizeColors(); break;
+    case EMERGENCY: /*Nothing to do here, handled separately*/ break;
+    case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
+    case ALARM: gHueRoll = false; speedMod = 1; myAlarmLight->setColor(almMode);
+      if (myAlarmLight->blinkStatus) myAlarmLight->On();
+      if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
+      EVERY_N_MILLISECONDS( 1000 ) {
+        myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
+      };
+      break;
+    case AMBERBLINK: gHueRoll = false; speedMod = 1;
+      if (myAmberLight->blinkStatus) {
+        myAmberLight->On();
+        myRedLight->Off();
+        myGreenLight->Off();
+      }
+      if (!myAmberLight->blinkStatus) myAmberLight->Off();
+      EVERY_N_MILLISECONDS( 800 ) {
+        myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
+      };
+      break;
+    case TRAFFICLIGHT: gHueRoll = false; speedMod = 1;
+      if (isTimeout(tlMillis, tlTimingLamp)) {
+        tlMillis = millis();
+        tlStatusVar++;
+
+      }
+      if (tlStatusVar > 3) tlStatusVar = 0;
+      switch (tlStatusVar) {
+        case 0: {
+            myRedLight->On();
+            myAmberLight->Off();
+            myGreenLight->Off();
+            tlTimingLamp = 8000;
+          }
+          break;
+        case 1: {
+            myRedLight->On();
+            myAmberLight->On();
+            myGreenLight->Off();
+            tlTimingLamp = 2000;
+          }
+          break;
+        case 2: {
+            myRedLight->Off();
+            myAmberLight->Off();
+            myGreenLight->On();
+            tlTimingLamp = 8000;
+          }
+          break;
+        case 3: {
+            myRedLight->Off();
+            myAmberLight->On();
+            myGreenLight->Off();
+            tlTimingLamp = 2000;
+          }
+          break;
+
+      }
+
+      break;
+
+  }
+  modifiedSpeed = globalSpeed * speedMod; //modifying the speed according to the pattern we want
+}
+
+
 /*
 
    _____ _    ____ _____ _     _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
@@ -83,14 +172,72 @@ void rainbow()
   FillLEDsFromPaletteColors();
 }
 
+void rainbowWithGlitter()
+{
+  // built-in FastLED rainbow, plus some random sparkly glitter
+  rainbow();
+  addGlitter(80); //eredetileg 80 volt a paraméter
+}
+
+void glitterOnly()
+{
+  fadeToBlackBy( leds, NUM_LEDS, (int)modifiedSpeed / 2); //eredetileg 20 volt az utolsó paraméter
+  addGlitter(scale); //eredetileg 20 volt a paraméter
+
+}
+
+void addGlitter( fract8 chanceOfGlitter)
+{
+  if ( random8() < chanceOfGlitter) {
+    leds[ random16(NUM_LEDS) ] += CRGB::White;
+  }
+}
+
 void bpm()
 {
   // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
-  uint8_t BeatsPerMinute = 62;
+
 
   uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
   for ( int i = 0; i < NUM_LEDS; i++) { //9948
     leds[i] = ColorFromPalette(currentPalette, gHue + (i * 2), beat - gHue + (i * 10));
+  }
+}
+
+void confetti()
+{
+  // random colored speckles that blink in and fade smoothly
+  fadeToBlackBy( leds, NUM_LEDS, 10);
+  int pos;
+  pos = random16(NUM_LEDS);
+  if (random8() < 8 * scale) {
+    leds[pos] += CHSV( gHue + random8(scale * 2), 200, 255); //eredetileg gHue+random8(64) volt az első paraméter
+  }
+}
+
+void sinelon()
+{
+  // a colored dot sweeping
+  // back and forth, with
+  // fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 2 * scale + 5); //eredetileg 20 volt az utolsó paraméter
+  int pos = beatsin16(20 - (int)scale / 2, 0, NUM_LEDS - 1); //eredetileg 13 volt a BPM paraméter
+  static int prevpos = 0;
+  if ( pos < prevpos ) {
+    fill_solid( leds + pos, (prevpos - pos) + 1, CHSV(gHue, 220, 255));
+  } else {
+    fill_solid( leds + prevpos, (pos - prevpos) + 1, CHSV( gHue, 220, 255));
+  }
+  prevpos = pos;
+}
+
+void juggle() {
+  // eight colored dots, weaving in and out of sync with each other
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  byte dothue = 0;
+  for ( int i = 0; i < 8; i++) {
+    leds[beatsin16(i + (int)scale / 2, 0, NUM_LEDS - 1)] |= CHSV(dothue, 200, 255); //i+7 volt a beatsin első paramétere
+    dothue += 32;
   }
 }
 
@@ -134,8 +281,8 @@ void fillnoise8() {
   // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
   // The amount of data smoothing we're doing depends on "speed".
   uint8_t dataSmoothing = 0;
-  if ( globalSpeed < 50) {
-    dataSmoothing = 200 - (globalSpeed); //globalSpeed*4 volt itt
+  if ( modifiedSpeed < 50) {
+    dataSmoothing = 200 - (modifiedSpeed); //modifiedSpeed*4 volt itt
   }
 
   for (int i = 0; i < MAX_DIMENSION; i++) {
@@ -161,14 +308,14 @@ void fillnoise8() {
     }
   }
 
-  //z += globalSpeed;
-  z += globalSpeed / 8;
+  //z += modifiedSpeed;
+  z += modifiedSpeed / 8;
 
   // apply slow drift to X and Y, just for visual variation.
-  //x += globalSpeed / 8;
-  x += globalSpeed / 64;
-  //y -= globalSpeed / 16;
-  y -= globalSpeed / 128;
+  //x += modifiedSpeed / 8;
+  x += modifiedSpeed / 64;
+  //y -= modifiedSpeed / 16;
+  y -= modifiedSpeed / 128;
 }
 
 void mapNoiseToLEDsUsingPalette()
@@ -218,5 +365,62 @@ void handleNoise() {
 }
 
 //NOISE FUNCTIONS END------------------------------------------
+
+
+
+void heartBeat() {
+  fadeToBlackBy( leds, NUM_LEDS, 4 * scale);
+
+  int ownBPM = BeatsPerMinute;
+  if (NUM_LEDS <= 48) ownBPM = BeatsPerMinute * 2; //BPM is manipulated because if a second front is emitted, it needs to be half of the original
+  int pos1 = beat8(ownBPM / 2, 0) * NUM_LEDS / 256;
+  int pos2 = beat8(ownBPM / 2, 0 + 300) * NUM_LEDS / 256;
+  int pos3 = beat8(ownBPM / 2, 0 + 60000 / ownBPM) * NUM_LEDS / 256; //delay of the second "front" is 1000*(BPM/60)
+  int pos4 = beat8(ownBPM / 2, 0 + 60000 / ownBPM + 300) * NUM_LEDS / 256;
+
+  if (flowDirection < 0) {
+    pos1 = NUM_LEDS - pos1 - 1;
+    pos2 = NUM_LEDS - pos2 - 1;
+    pos3 = NUM_LEDS - pos3 - 1;
+    pos4 = NUM_LEDS - pos4 - 1;
+  }
+
+  leds[pos1] = CHSV( bloodHue, bloodSat, 255 );
+  leds[pos2] = CHSV( bloodHue , bloodSat, 255 );
+  if (NUM_LEDS > 48) { //if the LED strip is long enough, a second "front" of pulses is visible
+    leds[pos3] = CHSV( bloodHue, bloodSat, 255 );
+    leds[pos4] = CHSV( bloodHue, bloodSat, 255 );
+  }
+}
+
+void randomWander() {
+  CRGB colorA;
+  CRGB colorB;
+  CRGB colorC;
+  EVERY_N_MILLISECONDS(5000) {//Change color in every 5 seconds
+    // Set pixel color
+    colorA = CHSV( random8(), 255, 255);
+    colorB = CHSV( random8(), 200, 100);
+    colorC = CHSV( random8(), 150, 200);
+  }
+
+  fadeToBlackBy( leds, NUM_LEDS, 60);
+  EVERY_N_MILLISECONDS(holdTime) {
+
+    leds[positionA] = colorA;
+    leds[positionB] = colorB;
+    leds[positionC] = colorC;
+    // Set new position, moving (forward or backward) by delta.
+    // NUM_LEDS is added to the position before doing the modulo
+    // to cover cases where delta is a negative value.
+    if (random8() < 10) deltaA *= -1; //10/255*100% eséllyel megfordul az irány
+    positionA = (positionA + deltaA + NUM_LEDS) % NUM_LEDS;
+    if (random8() < 30) deltaB *= -1; //30/255*100% eséllyel megfordul az irány
+    positionB = (positionB + deltaB + NUM_LEDS) % NUM_LEDS;
+    if (random8() < 50) deltaC *= -1; //50/255*100% eséllyel megfordul az irány
+    positionC = (positionC + deltaC + NUM_LEDS) % NUM_LEDS;
+
+  }
+}
 
 /**************FastLED FUNCTIONS END******************************/
