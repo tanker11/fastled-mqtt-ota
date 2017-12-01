@@ -1,4 +1,6 @@
 void setLEDMode() {
+
+
   switch (LEDMode) {
     case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; speedMod = 1; break;
     case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); speedMod = 1; break;
@@ -9,29 +11,31 @@ void setLEDMode() {
     case SINELON: gHueRoll = true; scaleMod = 1; speedMod = 0.1; sinelon();  break;
     case JUGGLE: gHueRoll = true; scaleMod = 0.5; speedMod = 0.05; juggle();  break;
     case HEARTBEAT: gHueRoll = false; scaleMod = 2 ; heartBeat();  break;
+    case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1.8; mirroredFire();  break; //speed->COOLING  scale->SPARKING
     case RND_WANDER: gHueRoll = false ; randomWander();  break;
     case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); speedMod = 1; break;
     case AQUAORANGE: setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255)); gHueRoll = false; dualColor(CUBIC); pastelizeColors(); speedMod = 0.5; break;
     case AQUAGREEN: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; dualColor(SINUS); pastelizeColors(); speedMod = 1; break;
+    case AQUAGREEN_NOISE: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; scaleMod = 2.5; speedMod = 1; handleNoise(); pastelizeColors(); break;
     case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scaleMod = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;
-    case NOISE_RND1: setRandomPalette(1); gHueRoll = false; scaleMod = 2.5; speedMod = 1; handleNoise(); pastelizeColors(); break;//1 color
-    case NOISE_RND2: setRandomPalette(2); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//2 colors
-    case NOISE_RND3: setRandomPalette(3); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
-    case NOISE_RND4: setRandomPalette(4); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_RND1: RandomPalette(1); gHueRoll = false; scaleMod = 2.5; speedMod = 1; handleNoise(); pastelizeColors(); break;//1 color
+    case NOISE_RND2: RandomPalette(2); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//2 colors
+    case NOISE_RND3: RandomPalette(3); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_RND4: RandomPalette(4); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
     case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scaleMod = 1.5; speedMod = 1; handleNoise(); pastelizeColors(); break;
     case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;
     case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;
   /*NINCS KÉSZ NEM NOISE LESZ*/    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scaleMod = 0.1; speedMod = 3; handleNoise(); pastelizeColors(); break;
     case EMERGENCY: /*Nothing to do here, handled separately*/ break;
     case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
-    case ALARM: gHueRoll = false; speedMod = 1; myAlarmLight->setColor(almMode);
+    case ALARM: currentPalette = RainbowColors_p; gHueRoll = false; speedMod = 1; myAlarmLight->setColor(almMode);
       if (myAlarmLight->blinkStatus) myAlarmLight->On();
       if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
       EVERY_N_MILLISECONDS( 1000 ) {
         myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
       };
       break;
-    case AMBERBLINK: gHueRoll = false; speedMod = 1;
+    case AMBERBLINK: currentPalette = trafficLightPalette; gHueRoll = false; speedMod = 1;
       if (myAmberLight->blinkStatus) {
         myAmberLight->On();
         myRedLight->Off();
@@ -42,7 +46,7 @@ void setLEDMode() {
         myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
       };
       break;
-    case TRAFFICLIGHT: gHueRoll = false; speedMod = 1;
+    case TRAFFICLIGHT: currentPalette = trafficLightPalette; gHueRoll = false; speedMod = 1;
       if (isTimeout(tlMillis, tlTimingLamp)) {
         tlMillis = millis();
         tlStatusVar++;
@@ -87,30 +91,36 @@ void setLEDMode() {
   modifiedSpeed = globalSpeed * speedMod; //modifying the speed according to the pattern we want
   modifiedScale = scale * scaleMod; //modifying the speed according to the pattern we want
 
+
   if (LEDMode != oldLEDMode) {
     Serial.println("LED MODE CHANGED");
+    LEDModeChanged = true;
     oldLEDMode = LEDMode;
-  }
+  } else LEDModeChanged = false;
 
   if (globalSpeed != oldGlobalSpeed) {
     Serial.println("SPEED CHANGED");
+    globalSpeedChanged = true;
     oldGlobalSpeed = globalSpeed;
-  }
+  }else globalSpeedChanged = false;
 
   if (scale != oldScale) {
     Serial.println("SCALE CHANGED");
+    scaleChanged = true;
     oldScale = scale;
-  }
+  }else scaleChanged = false;
 
   if (blendSpeed != oldBlendSpeed) {
     Serial.println("BLENDSPEED CHANGED");
+    blendSpeedChanged = true;
     oldBlendSpeed = blendSpeed;
-  }
+  }else blendSpeedChanged = false;
 
   if (BeatsPerMinute != oldBeatsPerMinute) {
     Serial.println("BPM CHANGED");
+    BeatsPerMinuteChanged = true;
     oldBeatsPerMinute = BeatsPerMinute;
-  }
+  }else BeatsPerMinuteChanged = false;
 
 }
 
@@ -449,6 +459,60 @@ void randomWander() {
     if (random8() < 50) deltaC *= -1; //50/255*100% eséllyel megfordul az irány
     positionC = (positionC + deltaC + NUM_LEDS) % NUM_LEDS;
 
+  }
+}
+
+
+//---------------------------------------------------------------
+// ***** NOTE: NUM_LEDS was replaced with NUM_LEDS/2 anywhere it was found
+//       below.  This makes the fire only run on the first half of the strip. *****
+//---------------------------------------------------------------
+void mirroredFire()
+{
+  COOLING = modifiedSpeed;
+  SPARKING = modifiedScale;
+
+  Serial.println(COOLING);
+  Serial.println(SPARKING);
+  // Array of temperature readings at each simulation cell
+  static byte heat[NUM_LEDS / 2];
+
+  // Step 1.  Cool down every cell a little
+  for ( int i = 0; i < NUM_LEDS / 2; i++) {
+    heat[i] = qsub8( heat[i],  random8(0, ((COOLING * 10) / NUM_LEDS / 2) + 2));
+  }
+
+  // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+  for ( int k = NUM_LEDS / 2 - 1; k >= 2; k--) {
+    heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+  }
+
+  // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+  if ( random8() < SPARKING ) {
+    int y = random8(7);
+    heat[y] = qadd8( heat[y], random8(160, 255) );
+  }
+
+  // Step 4.  Map from heat cells to LED colors
+  for ( int j = 0; j < NUM_LEDS / 2; j++) {
+    CRGB color = HeatColor( heat[(NUM_LEDS / 2) - 1 - j]); //heat[j] volt eredetileg, ettől középről kifelé megy
+    int pixelnumber;
+    if ( gReverseDirection ) {
+      pixelnumber = (NUM_LEDS / 2) - 1 - j;
+    } else {
+      pixelnumber = j;
+    }
+    leds[pixelnumber] = color;
+  }
+  mirror2ndHalf();
+}
+
+
+//---------------------------------------------------------------
+void mirror2ndHalf() {
+  // copy in reverse order first half of strip to second half
+  for (uint8_t i = 0; i < NUM_LEDS / 2; i++) {
+    leds[NUM_LEDS - 1 - i] = leds[i];
   }
 }
 

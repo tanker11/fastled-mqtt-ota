@@ -103,7 +103,7 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, AQUAORANGE, AQUAGREEN, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
@@ -133,6 +133,12 @@ int oldScale = 10;
 static uint16_t x;
 static uint16_t y;
 static uint16_t z;
+
+bool globalSpeedChanged = false;
+bool LEDModeChanged = false;
+bool scaleChanged = false;
+bool blendSpeedChanged = false;
+bool BeatsPerMinuteChanged = false;
 
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
@@ -166,6 +172,17 @@ short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white al
 #define flowDirection -1   // Use either 1 or -1 to set flow direction
 #define pulseFade 30  // How long the pulse takes to fade out.  Higher value is longer.
 #define pulseOffset 200  // Delay before second pulse in ms.  Higher value is more delay.
+
+//Variables for FIRE
+bool gReverseDirection = false;
+// COOLING: How much does the air cool as it rises?
+// Less cooling = taller flames.  More cooling = shorter flames.
+// Default 50, suggested range 20-100
+int COOLING = 90;
+// SPARKING: What chance (out of 255) is there that a new spark will be lit?
+// Higher chance = more roaring fire.  Lower chance = more flickery fire.
+// Default 120, suggested range 50-200.
+int SPARKING = 50;
 
 //Variables for 3 LEDs wandering randomly
 int16_t positionA = NUM_LEDS * 2 / 6; // Set initial start position of A pixel
@@ -210,70 +227,81 @@ void setBlackAndWhiteStripedPalette()
   //  currentPalette[12] = CRGB::White;
 }
 
+void RandomPalette(short numColors) {
+  if (LEDModeChanged) {
+    Serial.println("Applying palette immediately");
+    setRandomPalette(numColors);
+    
+  }
+  EVERY_N_MILLISECONDS( 10000 ) { //new random palette every 10 seconds. In order to avoid wait time, we apply the palette immediately on mode change
+    setRandomPalette(numColors);
+  }
+
+}
+
 void setRandomPalette(short numColors)
 {
-  EVERY_N_MILLISECONDS( 10000 ) { //new random palette every 10 seconds. Might have to wait for the first one to show up
-    // This function generates a random palette that's a gradient
-    // between four different colors.  The first is a dim hue, the second is
-    // a bright hue, the third is a bright pastel, and the last is
-    // another bright hue.  This gives some visual bright/dark variation
-    // which is more interesting than just a gradient of different hues.
 
-    CRGB black  = CRGB::Black;
-    CRGB random1, random2, random3;
-    switch (numColors) {
-      case 2:
-        random1 = CHSV( random8(), 255, 255);
-        random2 = CHSV( random8(), 255, 255);
-        random3 = black;
-        targetPalette = CRGBPalette16(
-                          random1, random1, black, black,
-                          random2, random2, black, random3,
-                          random1, random1, black, black,
-                          random2, random2, black, random3);
-        break;
+ 
+  // For FOUR COLORS This function generates a random palette that's a gradient
+  // between four different colors.  The first is a dim hue, the second is
+  // a bright hue, the third is a bright pastel, and the last is
+  // another bright hue.  This gives some visual bright/dark variation
+  // which is more interesting than just a gradient of different hues.
 
-      case 3:
-        random1 = CHSV( random8(), 255, 255);
-        random2 = CHSV( random8(), 200, 100);
-        random3 = CHSV( random8(), 150, 200);
-        targetPalette = CRGBPalette16(
-                          random1, random1, black, black,
-                          random2, random2, black, random3,
-                          random1, random1, black, black,
-                          random2, random2, black, random3);
-        break;
+  CRGB black  = CRGB::Black;
+  CRGB random1, random2, random3;
+  switch (numColors) {
+    case 2:
+      random1 = CHSV( random8(), 255, 255);
+      random2 = CHSV( random8(), 255, 255);
+      random3 = black;
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
+      break;
 
-      case 4:
-        // This function generates a random palette that's a gradient
-        // between four different colors.  The first is a dim hue, the second is
-        // a bright hue, the third is a bright pastel, and the last is
-        // another bright hue.  This gives some visual bright/dark variation
-        // which is more interesting than just a gradient of different hues.
+    case 3:
+      random1 = CHSV( random8(), 255, 255);
+      random2 = CHSV( random8(), 200, 100);
+      random3 = CHSV( random8(), 150, 200);
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
+      break;
 
-        targetPalette = CRGBPalette16(
-                          CHSV( random8(), 255, 32),
-                          CHSV( random8(), 255, 255),
-                          CHSV( random8(), 128, 255),
-                          CHSV( random8(), 255, 255));
+    case 4:
+      // This function generates a random palette that's a gradient
+      // between four different colors.  The first is a dim hue, the second is
+      // a bright hue, the third is a bright pastel, and the last is
+      // another bright hue.  This gives some visual bright/dark variation
+      // which is more interesting than just a gradient of different hues.
 
-        break;
-      default: //also for case 1:
+      targetPalette = CRGBPalette16(
+                        CHSV( random8(), 255, 32),
+                        CHSV( random8(), 255, 255),
+                        CHSV( random8(), 128, 255),
+                        CHSV( random8(), 255, 255));
 
-        random1 = CHSV( random8(), 255, 255);
-        random2 = black;
-        random3 = black;
-        targetPalette = CRGBPalette16(
-                          random1, random1, black, black,
-                          random2, random2, black, random3,
-                          random1, random1, black, black,
-                          random2, random2, black, random3);
+      break;
+    default: //also for case 1:
 
-        break;
-    }
+      random1 = CHSV( random8(), 255, 255);
+      random2 = black;
+      random3 = black;
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
 
-
+      break;
   }
+
 }
 
 void setLightningPalette()
@@ -378,7 +406,7 @@ class steadyLight
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
-        leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
+        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
       }
     }
 };
