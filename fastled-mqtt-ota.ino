@@ -103,26 +103,32 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, MOVE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, $$$_DIVIDER_$$$, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, AQUAORANGE, AQUAGREEN, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
+int oldLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
 
 float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
 int globalSpeed = 50; //defines generic animation speed default
-float speedMod; //modifies the speed factor according to the LEDMode
-float modifiedSpeed;
+int oldGlobalSpeed = 50;
+float globalPosShift=0;
+float speedMod = 1; //modifies the speed factor according to the LEDMode
+float scaleMod = 1; //modifies the scale factor according to the LEDMode
+float modifiedSpeed, modifiedScale;
 int globalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
+uint8_t oldBlendSpeed = 10; //defines palette cross-blend speed
 
 // Scale determines how far apart the pixels in our noise matrix are.  Try
 // changing these values around to see how it affects the motion of the display.  The
 // higher the value of scale, the more "zoomed out" the noise will be.  A value
 // of 1 will be so zoomed in, you'll mostly see solid colors.
 // Megjegyzés: ezt használjuk már animációkban is (nem csak 1-10-ig), ott átszámoljuk a megfelelő skálára
-int scale = 20; // scale is set dynamically once we've started up
-int new_scale = 20;
+int scale = 10; // scale is set dynamically once we've started up
+int oldScale = 10;
 // The 16 bit version of our coordinates
 static uint16_t x;
 static uint16_t y;
@@ -140,6 +146,7 @@ bool errorStatus = false;  //indicates if there is a need for error indication (
 bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
 bool gHueRoll = false; //indicates if gHue roll is activated
 uint8_t BeatsPerMinute = 80;
+uint8_t oldBeatsPerMinute = 80;
 
 //Variables for TEST mode
 int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
@@ -172,7 +179,7 @@ int8_t deltaC = 1;           // Using a negative value will move pixels backward
 
 // FASTLED PALETTES
 // This function sets up a palette of purple and green stripes.
-void SetFavoritePalette1()
+/*void SetFavoritePalette1()
 {
   CRGB orange = CHSV( 20, 255, 255);
   CRGB cyan  = CHSV( 110, 255, 255);
@@ -183,6 +190,13 @@ void SetFavoritePalette1()
                     orange, orange,  orange, orange,
                     cyan,  cyan,  cyan,  cyan,
                     orange, orange,  orange, orange );
+}*/
+
+void setDualPalette(CRGB color1, CRGB color2)
+{
+  targetPalette = CRGBPalette16(
+                    color1, color2);
+
 }
 
 void setBlackAndWhiteStripedPalette()

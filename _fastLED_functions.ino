@@ -5,22 +5,23 @@ void setLEDMode() {
     case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); speedMod = 1; break;
     case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; rainbowWithGlitter(); pastelizeColors(); speedMod = 1; break;
     case GLITTERONLY: gHueRoll = false; speedMod = 4; glitterOnly();  break;
-    case CONFETTI: gHueRoll = true; scale = 5; speedMod = 0.1; confetti();  break;
-    case SINELON: gHueRoll = true; scale = 10; speedMod = 0.1; sinelon();  break;
-    case JUGGLE: gHueRoll = true; scale = 5; speedMod = 0.05; juggle();  break;
-    case HEARTBEAT: gHueRoll = false; scale = 20 ; heartBeat();  break;
+    case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.1; confetti();  break;
+    case SINELON: gHueRoll = true; scaleMod = 1; speedMod = 0.1; sinelon();  break;
+    case JUGGLE: gHueRoll = true; scaleMod = 0.5; speedMod = 0.05; juggle();  break;
+    case HEARTBEAT: gHueRoll = false; scaleMod = 2 ; heartBeat();  break;
     case RND_WANDER: gHueRoll = false ; randomWander();  break;
     case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); speedMod = 1; break;
-/*NINCS KÉSZ*/    case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); speedMod = 1; break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
-    case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scale = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;
-    case NOISE_RND1: setRandomPalette(1); gHueRoll = false; scale = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;//1 color
-    case NOISE_RND2: setRandomPalette(2); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//2 colors
-    case NOISE_RND3: setRandomPalette(3); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
-    case NOISE_RND4: setRandomPalette(4); gHueRoll = false; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
-    case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scale = 15; speedMod = 1; handleNoise(); pastelizeColors(); break;
-    case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;
-    case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scale = 20; speedMod = 1; handleNoise(); pastelizeColors(); break;
-  /*NINCS KÉSZ NEM NOISE LESZ*/    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scale = 1; speedMod = 3; handleNoise(); pastelizeColors(); break;
+    case AQUAORANGE: setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255)); gHueRoll = false; dualColor(CUBIC); pastelizeColors(); speedMod = 0.5; break;
+    case AQUAGREEN: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; dualColor(SINUS); pastelizeColors(); speedMod = 1; break;
+    case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scaleMod = 25; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_RND1: setRandomPalette(1); gHueRoll = false; scaleMod = 2.5; speedMod = 1; handleNoise(); pastelizeColors(); break;//1 color
+    case NOISE_RND2: setRandomPalette(2); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//2 colors
+    case NOISE_RND3: setRandomPalette(3); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_RND4: setRandomPalette(4); gHueRoll = false; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;//3 colors
+    case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scaleMod = 1.5; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scaleMod = 2; speedMod = 1; handleNoise(); pastelizeColors(); break;
+  /*NINCS KÉSZ NEM NOISE LESZ*/    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scaleMod = 0.1; speedMod = 3; handleNoise(); pastelizeColors(); break;
     case EMERGENCY: /*Nothing to do here, handled separately*/ break;
     case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
     case ALARM: gHueRoll = false; speedMod = 1; myAlarmLight->setColor(almMode);
@@ -84,6 +85,33 @@ void setLEDMode() {
 
   }
   modifiedSpeed = globalSpeed * speedMod; //modifying the speed according to the pattern we want
+  modifiedScale = scale * scaleMod; //modifying the speed according to the pattern we want
+
+  if (LEDMode != oldLEDMode) {
+    Serial.println("LED MODE CHANGED");
+    oldLEDMode = LEDMode;
+  }
+
+  if (globalSpeed != oldGlobalSpeed) {
+    Serial.println("SPEED CHANGED");
+    oldGlobalSpeed = globalSpeed;
+  }
+
+  if (scale != oldScale) {
+    Serial.println("SCALE CHANGED");
+    oldScale = scale;
+  }
+
+  if (blendSpeed != oldBlendSpeed) {
+    Serial.println("BLENDSPEED CHANGED");
+    oldBlendSpeed = blendSpeed;
+  }
+
+  if (BeatsPerMinute != oldBeatsPerMinute) {
+    Serial.println("BPM CHANGED");
+    oldBeatsPerMinute = BeatsPerMinute;
+  }
+
 }
 
 
@@ -144,13 +172,13 @@ void steady(int from, int to, CRGB color) {
 
 //####SteadyLight class
 
-void FillLEDsFromPaletteColors( ) {
+void FillLEDsFromPaletteColors(TBlendType requestedBlending ) {
   uint8_t brightness = 255;
   int paletteStep = (int)256 / NUM_LEDS;
   //currentBlending = NOBLEND;
-  currentBlending = LINEARBLEND;
+  //currentBlending = LINEARBLEND;
   for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, currentBlending);
+    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, requestedBlending);
 
 
   }
@@ -169,7 +197,7 @@ void rainbow()
 {
   // FastLED's built-in rainbow generator
   //fill_rainbow( leds, NUM_LEDS, gHue, 7);
-  FillLEDsFromPaletteColors();
+  FillLEDsFromPaletteColors(LINEARBLEND);
 }
 
 void rainbowWithGlitter()
@@ -182,7 +210,7 @@ void rainbowWithGlitter()
 void glitterOnly()
 {
   fadeToBlackBy( leds, NUM_LEDS, (int)modifiedSpeed / 2); //eredetileg 20 volt az utolsó paraméter
-  addGlitter(scale); //eredetileg 20 volt a paraméter
+  addGlitter(modifiedScale); //eredetileg 20 volt a paraméter
 
 }
 
@@ -210,8 +238,8 @@ void confetti()
   fadeToBlackBy( leds, NUM_LEDS, 10);
   int pos;
   pos = random16(NUM_LEDS);
-  if (random8() < 8 * scale) {
-    leds[pos] += CHSV( gHue + random8(scale * 2), 200, 255); //eredetileg gHue+random8(64) volt az első paraméter
+  if (random8() < 8 * modifiedScale) {
+    leds[pos] += CHSV( gHue + random8(modifiedScale * 2), 200, 255); //eredetileg gHue+random8(64) volt az első paraméter
   }
 }
 
@@ -220,8 +248,8 @@ void sinelon()
   // a colored dot sweeping
   // back and forth, with
   // fading trails
-  fadeToBlackBy( leds, NUM_LEDS, 2 * scale + 5); //eredetileg 20 volt az utolsó paraméter
-  int pos = beatsin16(20 - (int)scale / 2, 0, NUM_LEDS - 1); //eredetileg 13 volt a BPM paraméter
+  fadeToBlackBy( leds, NUM_LEDS, 2 * modifiedScale + 5); //eredetileg 20 volt az utolsó paraméter
+  int pos = beatsin16(20 - (int)modifiedScale / 2, 0, NUM_LEDS - 1); //eredetileg 13 volt a BPM paraméter
   static int prevpos = 0;
   if ( pos < prevpos ) {
     fill_solid( leds + pos, (prevpos - pos) + 1, CHSV(gHue, 220, 255));
@@ -236,13 +264,14 @@ void juggle() {
   fadeToBlackBy( leds, NUM_LEDS, 20);
   byte dothue = 0;
   for ( int i = 0; i < 8; i++) {
-    leds[beatsin16(i + (int)scale / 2, 0, NUM_LEDS - 1)] |= CHSV(dothue, 200, 255); //i+7 volt a beatsin első paramétere
+    leds[beatsin16(i + (int)modifiedScale / 2, 0, NUM_LEDS - 1)] |= CHSV(dothue, 200, 255); //i+7 volt a beatsin első paramétere
     dothue += 32;
   }
 }
 
-void move()
-{
+/*
+  void move()
+  {
   uint8_t brightness = 255;
   int paletteStep = (int)256 / NUM_LEDS;
   currentBlending = NOBLEND;
@@ -251,7 +280,7 @@ void move()
 
 
   }
-}
+  }*/
 
 //NOISE FUNCTIONS-------------------------------------------------
 //
@@ -286,9 +315,9 @@ void fillnoise8() {
   }
 
   for (int i = 0; i < MAX_DIMENSION; i++) {
-    int ioffset = scale * i;
+    int ioffset = modifiedScale * i;
     for (int j = 0; j < MAX_DIMENSION; j++) {
-      int joffset = scale * j;
+      int joffset = modifiedScale * j;
 
       uint8_t data = inoise8(x + ioffset, y + joffset, z);
 
@@ -369,7 +398,7 @@ void handleNoise() {
 
 
 void heartBeat() {
-  fadeToBlackBy( leds, NUM_LEDS, 4 * scale);
+  fadeToBlackBy( leds, NUM_LEDS, 4 * modifiedScale);
 
   int ownBPM = BeatsPerMinute;
   if (NUM_LEDS <= 48) ownBPM = BeatsPerMinute * 2; //BPM is manipulated because if a second front is emitted, it needs to be half of the original
@@ -421,6 +450,41 @@ void randomWander() {
     positionC = (positionC + deltaC + NUM_LEDS) % NUM_LEDS;
 
   }
+}
+
+void dualColor(short drawMode) {
+  //MEGCSINÁLNI SIZE AND BLENDTYPE
+
+  //Fills the LED matrix with two colors in the DualPalette
+  int localSize = 8;
+  bool colorFlip = false;
+  int posColor; //pick this color from the dual palette
+  int scaled; //scaled value of the given wave
+  int shiftedPosition; //shift position with the time according to the speed param
+
+
+  globalPosShift += globalSpeed / 100.0; //use global position shift variable
+
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    switch (drawMode) {
+      case SQUARE:
+        if ( (i + 1) % localSize == 0) colorFlip = !colorFlip;
+        posColor = colorFlip * 255;
+        break;
+      case SINUS:
+        scaled = (i) * 128 / (localSize); //scales to the sine waveform to the range of LEDs
+        posColor = sin8(scaled);
+        break;
+      case CUBIC:
+        scaled = (i) * 256 / (localSize); //scales to the cubic waveform to the range of LEDs
+        posColor = cubicwave8(scaled);
+        break;
+    }
+
+    int shiftedPosition = (i + (int)globalPosShift + NUM_LEDS) % NUM_LEDS;
+    leds[shiftedPosition] = ColorFromPalette( targetPalette, posColor , 255, NOBLEND);
+  }
+
 }
 
 /**************FastLED FUNCTIONS END******************************/
