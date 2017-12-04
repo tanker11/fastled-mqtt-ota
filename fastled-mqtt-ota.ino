@@ -49,14 +49,14 @@ const bool sinusoid = true;
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      3840    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
 #define RETAINED true
 
-const int FW_VERSION = 1001;
-char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
+const int FW_VERSION = 1002;
+char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
 #define ALIAS "alma"
@@ -103,7 +103,7 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {OFF, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {OFF, CSTEADY, /*BATHMIRROR,*/ RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE,PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
@@ -114,13 +114,18 @@ float gHue = 0; // rotating "base color" used by many of the patterns - should b
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
 int globalSpeed = 50; //defines generic animation speed default
 int oldGlobalSpeed = 50;
-float globalPosShift=0;
+float globalPosShift = 0;
 float speedMod = 1; //modifies the speed factor according to the LEDMode
 float scaleMod = 1; //modifies the scale factor according to the LEDMode
-float modifiedSpeed, modifiedScale;
+float satMod = 1; //modifies the saturation factor according to the LEDMode
+float bSpeedMod =1; //modifies blending speed factor according to the 
+float modifiedSpeed, modifiedScale, modifiedSaturation, modifiedBlendSpeed; //modified values after the global and modifier factor multiplications
 int globalSaturation = 255;
+int oldGlobalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
 uint8_t oldBlendSpeed = 10; //defines palette cross-blend speed
+int blendIndex; //index of position between the color1 and color2 where we are doing a blended smooth conversion (CSTEADY mode)
+bool newColor=false;
 
 // Scale determines how far apart the pixels in our noise matrix are.  Try
 // changing these values around to see how it affects the motion of the display.  The
@@ -139,6 +144,7 @@ bool LEDModeChanged = false;
 bool scaleChanged = false;
 bool blendSpeedChanged = false;
 bool BeatsPerMinuteChanged = false;
+bool globalSaturationChanged = false;
 
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
@@ -197,7 +203,7 @@ int8_t deltaC = 1;           // Using a negative value will move pixels backward
 // FASTLED PALETTES
 // This function sets up a palette of purple and green stripes.
 /*void SetFavoritePalette1()
-{
+  {
   CRGB orange = CHSV( 20, 255, 255);
   CRGB cyan  = CHSV( 110, 255, 255);
   CRGB black  = CRGB::Black;
@@ -207,7 +213,7 @@ int8_t deltaC = 1;           // Using a negative value will move pixels backward
                     orange, orange,  orange, orange,
                     cyan,  cyan,  cyan,  cyan,
                     orange, orange,  orange, orange );
-}*/
+  }*/
 
 void setDualPalette(CRGB color1, CRGB color2)
 {
@@ -227,13 +233,13 @@ void setBlackAndWhiteStripedPalette()
   //  currentPalette[12] = CRGB::White;
 }
 
-void RandomPalette(short numColors) {
+void RandomPalette(short numColors, unsigned long timing) {
   if (LEDModeChanged) {
     Serial.println("Applying palette immediately");
     setRandomPalette(numColors);
-    
+
   }
-  EVERY_N_MILLISECONDS( 10000 ) { //new random palette every 10 seconds. In order to avoid wait time, we apply the palette immediately on mode change
+  EVERY_N_MILLISECONDS( timing ) { //new random palette every 10 seconds. In order to avoid wait time, we apply the palette immediately on mode change
     setRandomPalette(numColors);
   }
 
@@ -242,7 +248,7 @@ void RandomPalette(short numColors) {
 void setRandomPalette(short numColors)
 {
 
- 
+
   // For FOUR COLORS This function generates a random palette that's a gradient
   // between four different colors.  The first is a dim hue, the second is
   // a bright hue, the third is a bright pastel, and the last is
@@ -364,12 +370,6 @@ class steadyLight
       LEDColorIndex = colorIndex;
     }
 
-    int saturateValue(int value) {
-      int saturated = value;
-      if (value < minDim) saturated = 0;
-      if (value > maxDim) saturated = maxDim;
-      return saturated;
-    }
 
     void On() {
       if (elementDim + dimSpeedUp >= maxDim) {
@@ -394,7 +394,7 @@ class steadyLight
       /*
          How this works: there is a "profile" of brightness, a curve. The curve is virtually moved upwards and downwards with an offset.
          The result brightness is saturated at maxDim level.
-         The remanence brightness (very small values) are dropped to zero if they are below minDim level) see saturateValue() function above
+         The remanence brightness (very small values) are dropped to zero if they are below minDim level
       */
       for (int currentLED = fromLED; currentLED < toLED + 1; currentLED++) {
         int posBrightness, scaled;
@@ -406,7 +406,7 @@ class steadyLight
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
-        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
+        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim,0,255), LINEARBLEND);
       }
     }
 };
@@ -442,8 +442,8 @@ void setup()
   all_off_immediate(); //Clear the LED array
   delay(500); //safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
 
   FastLED.setBrightness(MAX_BRIGHTNESS);
   //set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //depreciated
@@ -511,6 +511,7 @@ void loop() {
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
+
     if (!emergencyState) {  //blinks only if not in emergency light mode
       if (LEDMode != OFF) prevLEDMode = LEDMode;
       LEDMode = OFF;

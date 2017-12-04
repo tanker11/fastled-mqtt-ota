@@ -178,6 +178,7 @@ void processRecMessage() {
       if (LEDMode != ALARM) { //If LEDMode is not ALARM, change the mode
         prevLEDMode = LEDMode;
         LEDMode = atoi(recValue);
+        if (LEDMode==CSTEADY) newColor=true;
         Serial.printf("ledmode:%d\n", LEDMode);
       } else { //if in ALARM mode, change the prevLEDMode instead, then it will go back to the new prevMode after the ALARM status
         prevLEDMode = atoi(recValue);
