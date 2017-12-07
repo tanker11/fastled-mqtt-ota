@@ -566,7 +566,7 @@ void loop() {
       if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         Serial.println("Client connected");
         Serial.println();
-        LEDMode = prevLEDMode; //restore the previous LEDMode
+        //LEDMode = prevLEDMode; //restore the previous LEDMode
         FastLED.setBrightness(MAX_BRIGHTNESS); //restore the MAX_BRIGHTNESS
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
