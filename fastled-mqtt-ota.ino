@@ -83,6 +83,7 @@ const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, 
 //MQTT variables
 // Replace with the IP address of your MQTT server
 IPAddress mqttServerIP(192, 168, 1, 1);
+//IPAddress mqttServerIP(172, 29, 97, 124);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -103,7 +104,12 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {OFF, CSTEADY, /*BATHMIRROR,*/ RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE,PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_LIGHTNING, _DIVIDER_, ALARM, STEADY, TEST, EMERGENCY, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {/*0..9 */  OFF, CSTEADY, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, SLOWRUNLIGHT,
+                 /*10..19 */ FASTRUNLIGHT, ACCUMLIGHT, INVERSEGLITTER, PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT,
+                 /*20..31 */  RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
+                 _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
+     }; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+     
 enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
@@ -172,7 +178,6 @@ unsigned long tlMillis; //Timing millis for Traffic Light
 short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white all LEDs
 
 //Variables for Heart_Blood mode
-#define bloodHue  0  // Blood color [hue from 0-255]
 #define bloodSat  255  // Blood staturation [0-255]
 #define baseBrightness  0  // Brightness of LEDs when not pulsing. Set to 0 for off.
 #define flowDirection -1   // Use either 1 or -1 to set flow direction
@@ -181,6 +186,7 @@ short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white al
 
 //Variables for FIRE
 bool gReverseDirection = false;
+int randomFireNumber;
 // COOLING: How much does the air cool as it rises?
 // Less cooling = taller flames.  More cooling = shorter flames.
 // Default 50, suggested range 20-100
@@ -199,6 +205,15 @@ int8_t deltaB = 1;           // Using a negative value will move pixels backward
 int8_t deltaC = 1;           // Using a negative value will move pixels backwards.
 #define holdTime 80   // Milliseconds to hold position before advancing
 
+//Variables for accumLight
+int accumCurrentPos; //shows the position of the current moving LED
+int accumFillPos; //shows the current position of the filled status
+
+//Variables for InverseGlitter
+int invPos = 0;
+
+//Variables for lightning
+unsigned long lightningTime;
 
 // FASTLED PALETTES
 // This function sets up a palette of purple and green stripes.
@@ -231,6 +246,21 @@ void setBlackAndWhiteStripedPalette()
   // currentPalette[4] = CRGB::White;
   currentPalette[8] = CRGB::White;
   //  currentPalette[12] = CRGB::White;
+}
+
+void randomFirePalette (unsigned long timing) { //selects from gradient palettes with dark and bright end for fire simulations
+
+  EVERY_N_MILLISECONDS( timing ) { //new random palette every n seconds. In order to avoid wait time, we apply the palette immediately on mode change
+    randomFireNumber = random8(4);
+
+  }
+  randomFireNumber = 2;
+  switch (randomFireNumber) {
+    case 0: targetPalette = HeatColors_p; break; //traditional fire colors
+    case 1: targetPalette = CRGBPalette16( CRGB::Black, CHSV(0, 180, 255), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink fire
+    case 2: targetPalette = CRGBPalette16( CRGB::Black, CHSV(25, 255, 255), CHSV(28, 200, 255) , CHSV(32, 150, 255)); break; //orange fire
+    default: targetPalette = HeatColors_p; break; //traditional fire colors
+  }
 }
 
 void RandomPalette(short numColors, unsigned long timing) {

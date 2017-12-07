@@ -176,6 +176,7 @@ void processRecMessage() {
     //If found, process it
     if (strcmp(recCommand, "ledmode") == 0) {
       if (LEDMode != ALARM) { //If LEDMode is not ALARM, change the mode
+        newColor=true; //this is needed for refreshing the color if a random is needed and we send the same command (used for CSTEADY)
         prevLEDMode = LEDMode;
         LEDMode = atoi(recValue);
         if (LEDMode==CSTEADY) newColor=true;

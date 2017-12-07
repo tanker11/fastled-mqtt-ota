@@ -1,25 +1,32 @@
 void setLEDMode() {
-
+  // Add entropy to random number generator; we use a lot of it.  
+  random16_add_entropy( random(5));
 
   switch (LEDMode) {
     case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; bSpeedMod = 1; speedMod = 1; break;
     case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); speedMod = 1; break;
-    case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(CRGB::Red/*EZ NEM VÉGLEGES ÍGY*/); break; //needs newColor to be true for one cycle!!!
+    //case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(false, CRGB::Pink); break; //needs newColor to be true for one cycle!!!
+    case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(true,0); break; //needs newColor to be true for one cycle!!!
     case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbow(); pastelizeColors(); speedMod = 1; break;
     case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbowWithGlitter(); pastelizeColors(); speedMod = 1; break;
-    case GLITTERONLY: gHueRoll = false; speedMod = 4; bSpeedMod = 1; satMod = 1; glitterOnly();  break;
+    case GLITTERONLY: gHueRoll = false; scaleMod = 3; bSpeedMod = 20; satMod = 1; glitterOnly();  break;
     case PINK: gHueRoll = false; bSpeedMod = 1; satMod = 0.8; steady(0, NUM_LEDS - 1, CRGB::Red); pastelizeColors(); break;
-    case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.1; bSpeedMod = 1; satMod = 1; confetti();  break;
-    case SINELON: gHueRoll = true; scaleMod = 1; speedMod = 0.1; bSpeedMod = 1; satMod = 1; sinelon();  break;
-    case JUGGLE: gHueRoll = true; scaleMod = 0.5; speedMod = 0.05; bSpeedMod = 1; satMod = 1; juggle();  break;
-    case HEARTBEAT: gHueRoll = false; scaleMod = 2 ; bSpeedMod = 1; satMod = 1; heartBeat();  break;
-    case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1.8; bSpeedMod = 1; satMod = 1; mirroredFire();  break; //speed->COOLING  scale->SPARKING
-    case RND_WANDER: gHueRoll = false ; bSpeedMod = 1; satMod = 1; randomWander();  break;
+    case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.02; bSpeedMod = 1; satMod = 1; confetti();  break;
+    case SINELON: gHueRoll = true; scaleMod = 10; speedMod = 0.3; bSpeedMod = 0.5; satMod = 1; sinelon();  break;
+    case JUGGLE: gHueRoll = true; scaleMod = 20; speedMod = 0.1; bSpeedMod = 0.1; satMod = 1; juggle();  break;
+    case SLOWRUNLIGHT: gHueRoll = true; scaleMod = 20; speedMod = 0.4; bSpeedMod = 12.5; satMod = 1; runningLight();  break; //slow steps to next pixel with glowing colors
+    case FASTRUNLIGHT: gHueRoll = true; scaleMod = 5; speedMod = 4; bSpeedMod = 0.5; satMod = 1; runningLight();  break; //moderate sawtooth sweep
+    case ACCUMLIGHT: gHueRoll = true; scaleMod = 10; speedMod = 1; bSpeedMod = 0.1; satMod = 1; accumLight();  break;
+    case INVERSEGLITTER: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(); break; //colored blink in a background color
+    case HEARTBEAT: gHueRoll = false; scaleMod = 1 ; bSpeedMod = 2; satMod = 1; heartBeat(0);  break; //0=> red
+    case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1; bSpeedMod = 8; satMod = 1; randomFirePalette(5000); mirroredFire();  break; //speed->COOLING  scale->SPARKING
+    case RND_WANDER: gHueRoll = false ; speedMod = 1; bSpeedMod = 6; satMod = 1; randomWander();  break;
     case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; bpm(); pastelizeColors(); break;
     case AQUAORANGE: setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255)); gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(CUBIC); pastelizeColors(); speedMod = 0.5; break;
     case AQUAGREEN: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(SINUS); pastelizeColors(); speedMod = 1; break;
     case AQUAGREEN_NOISE: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
-    case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scaleMod = 25; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_PINS: RandomPalette(3, 5000); gHueRoll = false; scaleMod = 25; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break; //3 colors//bizsergés (needles and pins)
     case NOISE_RND1: RandomPalette(1, 30000); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break; //1 color
     case NOISE_RND2: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break; //2 colors
     case NOISE_RND3: RandomPalette(3, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break; //3 colors
@@ -27,9 +34,10 @@ void setLEDMode() {
     case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scaleMod = 1.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
     case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
     case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
-  /*NINCS KÉSZ NEM NOISE LESZ*/    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scaleMod = 0.1; speedMod = 3; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
+    case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scaleMod = 0.1; speedMod = 3; bSpeedMod = 1; satMod = 1; handleNoise(); pastelizeColors(); break;
     case EMERGENCY: /*Nothing to do here, handled separately*/ break;
     case TEST: gHueRoll = false; satMod = 1; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
+    case WHITE_TEST: gHueRoll = false; satMod = 1; steady(0, NUM_LEDS - 1, CRGB::White);  break;
     case ALARM: currentPalette = RainbowColors_p; gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; myAlarmLight->setColor(almMode);
       if (myAlarmLight->blinkStatus) myAlarmLight->On();
       if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
@@ -169,22 +177,17 @@ void pastelizeColors() {
   }
 */
 
-void blendToNewColor(CRGB color) {
-  /*this realizes a blend from the currentPalette color(0) to the targetPalette color(0) and fills all the LEDs
-     How it works: calls for a new random palette color (and uses the first one)
-     Calling RandomPalette() will apply a new palette for the first call, and then in every x1000msec
-     it also resets the blendIndext that runs through the fromColor to the ToColor (currentPalette's and targetPalette's first color)
+void blendToNewColor(bool random, CRGB color) {
+  /*If a new color is requested (newColor boolean is true) it fills the target palette with a new color let it be random or requested
+     In that case it resets the blendIndext that swipes from 0 to 255 at the speed of modifiedBlendSpeed and controls the blend of the color
+     if random=true, the color variable will not be evaluated
   */
-  Serial.print("nc:");
-  Serial.println(newColor);
   if (newColor) {
     newColor = false;
     blendIndex = 0;
-    targetPalette = CRGBPalette16(
-                      CHSV( random8(), random8(150, 256), 255), CRGB::Black, CRGB::Black, CRGB::Black,
-                      CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black,
-                      CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black,
-                      CRGB::Black, CRGB::Black, CRGB::Black, CRGB::Black);
+    if (random) fill_solid( targetPalette, 16, CHSV( random8(), random8(150, 256), 255));
+    else fill_solid( targetPalette, 16, color);
+
   }
 
   blendIndex = blendIndex + modifiedBlendSpeed;
@@ -227,9 +230,6 @@ void steady(int from, int to, CRGB color) {
 }
 
 
-
-//####SteadyLight class
-
 void FillLEDsFromPaletteColors(TBlendType requestedBlending ) {
   uint8_t brightness = 255;
   int paletteStep = (int)256 / NUM_LEDS;
@@ -265,9 +265,19 @@ void rainbowWithGlitter()
   addGlitter(80); //eredetileg 80 volt a paraméter
 }
 
+void inverseGlitter() {
+  //it lits the background and a random position led with another color from the same palette (a 2-color palette)
+  fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 0, 255, LINEARBLEND));
+  leds[invPos] = ColorFromPalette(currentPalette, 64, 255, LINEARBLEND);
+  EVERY_N_MILLISECONDS(500) {
+    invPos = random8(NUM_LEDS);
+  }
+}
+
+
 void glitterOnly()
 {
-  fadeToBlackBy( leds, NUM_LEDS, (int)modifiedSpeed / 2); //eredetileg 20 volt az utolsó paraméter
+  fadeToBlackBy( leds, NUM_LEDS, (int)modifiedBlendSpeed / 2); //eredetileg 20 volt az utolsó paraméter
   addGlitter(modifiedScale); //eredetileg 20 volt a paraméter
 
 }
@@ -293,7 +303,7 @@ void bpm()
 void confetti()
 {
   // random colored speckles that blink in and fade smoothly
-  fadeToBlackBy( leds, NUM_LEDS, 10);
+  fadeToBlackBy( leds, NUM_LEDS, modifiedBlendSpeed);
   int pos;
   pos = random16(NUM_LEDS);
   if (random8() < 8 * modifiedScale) {
@@ -306,8 +316,12 @@ void sinelon()
   // a colored dot sweeping
   // back and forth, with
   // fading trails
-  fadeToBlackBy( leds, NUM_LEDS, 2 * modifiedScale + 5); //eredetileg 20 volt az utolsó paraméter
-  int pos = beatsin16(20 - (int)modifiedScale / 2, 0, NUM_LEDS - 1); //eredetileg 13 volt a BPM paraméter
+
+  //blendspeed=> color changing speed
+  //scale=> length of trail
+  //speed=> speed of dot(s)
+  fadeToBlackBy( leds, NUM_LEDS, modifiedScale);
+  int pos = beatsin16(round(modifiedSpeed / 2), 0, NUM_LEDS );
   static int prevpos = 0;
   if ( pos < prevpos ) {
     fill_solid( leds + pos, (prevpos - pos) + 1, CHSV(gHue, 220, 255));
@@ -317,14 +331,61 @@ void sinelon()
   prevpos = pos;
 }
 
+
+
 void juggle() {
-  // eight colored dots, weaving in and out of sync with each other
-  fadeToBlackBy( leds, NUM_LEDS, 20);
+  // four colored dots, weaving in and out of sync with each other
+  fadeToBlackBy( leds, NUM_LEDS, modifiedScale / 3);
   byte dothue = 0;
-  for ( int i = 0; i < 8; i++) {
-    leds[beatsin16(i + (int)modifiedScale / 2, 0, NUM_LEDS - 1)] |= CHSV(dothue, 200, 255); //i+7 volt a beatsin első paramétere
-    dothue += 32;
+  for ( int i = 0; i < 4; i++) {
+    leds[beatsin16(round(i + modifiedSpeed / 2), 0, NUM_LEDS )] |= CHSV(dothue + gHue, 200, 255);
+    dothue += 64;
   }
+}
+
+void accumLight() {
+  //shows moving dots that accumulate on the LED stripe
+  if (LEDModeChanged) {
+    //reset variables if just switched to the mode
+    accumFillPos = NUM_LEDS;
+    accumCurrentPos = 0;
+  }
+
+  for (int i = 0; i < accumFillPos; i++) { //fades the LEDs out where there is no accummulated dot
+    leds[i].fadeToBlackBy(modifiedScale);
+  }
+
+  EVERY_N_MILLISECONDS(80) {  //####Ezt még meg kell javítani
+    leds[accumCurrentPos] = CHSV((255 / NUM_LEDS) * accumFillPos + gHue, 255, 255);
+    accumCurrentPos++; //step one
+    if (accumCurrentPos == accumFillPos) {
+      accumCurrentPos = 0;
+      accumFillPos--;
+    }
+    if (accumFillPos == 0) {
+      accumFillPos = NUM_LEDS;
+      accumCurrentPos = 0;
+    }
+  }
+}
+
+void runningLight() {
+  // a colored dot sweeping
+  // back and forth, with
+  // fading trails
+
+  //blendspeed=> color changing speed
+  //scale=> length of trail (fading speed)
+  //speed=> speed of dot(s)
+  fadeToBlackBy( leds, NUM_LEDS,  modifiedScale);
+  int pos = triwave8(millis() / (255 - modifiedSpeed)) * NUM_LEDS / 255;
+  static int prevpos = 0;
+  if ( pos < prevpos ) {
+    fill_solid( leds + pos, (prevpos - pos) + 1, CHSV(gHue, 220, 255));
+  } else {
+    fill_solid( leds + prevpos, (pos - prevpos) + 1, CHSV( gHue, 220, 255));
+  }
+  prevpos = pos;
 }
 
 /*
@@ -362,7 +423,7 @@ uint16_t XY( uint8_t x, uint8_t y)
   }
   return i;
 }
-// Fill the x/y array of 8-bit noise values using the inoise8 function.
+// Fill the x/y array of 8-bit values using the inoise8 function.
 void fillnoise8() {
   // If we're runing at a low "speed", some 8-bit artifacts become visible
   // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
@@ -441,21 +502,40 @@ void mapNoiseToLEDsUsingPalette()
 
 
 void handleNoise() {
+//Check if we are in lightning mode, because then pause times should be inserted
+  bool doLoop = true;
+  if (LEDMode == NOISE_LIGHTNING) { 
+    int sum = 0;
+    for (int i = 0; i < NUM_LEDS; i++) { //we check if the current state is all black
+      sum += leds[i];
+    }
+    if (sum == 0) { //if yes, we set 180ms waiting (in series) by inhibiting the normal noise handling using the doLoop variable
+      if (isTimeout(lightningTime, 180)) {
+        doLoop = true;
+        lightningTime = millis();
+      } else {
+        doLoop = false;
+      }
+    }
+  }
 
-  // generate noise data
-  fillnoise8();
 
-  // convert the noise data to colors in the LED array
-  // using the current palette
-  mapNoiseToLEDsUsingPalette();
+  
+  if (doLoop) {
+    // generate noise data
+    fillnoise8();
 
+    // convert the noise data to colors in the LED array
+    // using the current palette
+    mapNoiseToLEDsUsingPalette();
+  }
 }
 
 //NOISE FUNCTIONS END------------------------------------------
 
 
 
-void heartBeat() {
+void heartBeat(int bloodHue) {
   fadeToBlackBy( leds, NUM_LEDS, 4 * modifiedScale);
 
   int ownBPM = BeatsPerMinute;
@@ -484,15 +564,16 @@ void randomWander() {
   CRGB colorA;
   CRGB colorB;
   CRGB colorC;
-  EVERY_N_MILLISECONDS(5000) {//Change color in every 5 seconds
+
+  EVERY_N_MILLISECONDS(10000) {//Change color in every 10 seconds
     // Set pixel color
     colorA = CHSV( random8(), 255, 255);
-    colorB = CHSV( random8(), 200, 100);
+    colorB = CHSV( random8(), 200, 200);
     colorC = CHSV( random8(), 150, 200);
   }
 
-  fadeToBlackBy( leds, NUM_LEDS, 60);
-  EVERY_N_MILLISECONDS(holdTime) {
+  fadeToBlackBy( leds, NUM_LEDS, modifiedBlendSpeed);
+  EVERY_N_MILLISECONDS(80) {  //####hogy kell változtatni??? Változóval nem megy...
 
     leds[positionA] = colorA;
     leds[positionB] = colorB;
@@ -510,14 +591,58 @@ void randomWander() {
   }
 }
 
-
-//---------------------------------------------------------------
-// ***** NOTE: NUM_LEDS was replaced with NUM_LEDS/2 anywhere it was found
-//       below.  This makes the fire only run on the first half of the strip. *****
-//---------------------------------------------------------------
 void mirroredFire()
 {
-  COOLING = modifiedSpeed;
+
+  COOLING = modifiedBlendSpeed;
+  SPARKING = modifiedScale;
+
+  // Array of temperature readings at each simulation cell
+  static byte heat[NUM_LEDS];
+
+  // Step 1.  Cool down every cell a little
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    heat[i] = qsub8( heat[i],  random8(0, ((COOLING * 10) / NUM_LEDS) + 2));
+  }
+
+  // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+  for ( int k = NUM_LEDS - 1; k >= 2; k--) {
+    heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+  }
+
+  // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+  if ( random8() < SPARKING ) {
+    int y = random8(7);
+    heat[y] = qadd8( heat[y], random8(160, 255) );
+  }
+
+  // Step 4.  Map from heat cells to LED colors
+  for ( int j = 0; j < NUM_LEDS; j++) {
+    // Scale the heat value from 0-255 down to 0-240
+    // for best results with color palettes.
+    byte colorindex = scale8( heat[(NUM_LEDS / 2) - 1 - j], 240); //heat[j] volt eredetileg, ettől középről kifelé megy
+
+
+    CRGB color = ColorFromPalette( currentPalette, colorindex);
+    int pixelnumber;
+    if ( gReverseDirection ) {
+      pixelnumber = (NUM_LEDS - 1) - j;
+    } else {
+      pixelnumber = j;
+    }
+    leds[pixelnumber] = color;
+  }
+  mirror2ndHalf();
+}
+
+/*
+  //---------------------------------------------------------------
+  // ***** NOTE: NUM_LEDS was replaced with NUM_LEDS/2 anywhere it was found
+  //       below.  This makes the fire only run on the first half of the strip. *****
+  //---------------------------------------------------------------
+  void mirroredFire()
+  {
+  COOLING = modifiedBlendSpeed;
   SPARKING = modifiedScale;
 
   // Array of temperature readings at each simulation cell
@@ -551,7 +676,7 @@ void mirroredFire()
     leds[pixelnumber] = color;
   }
   mirror2ndHalf();
-}
+  }*/
 
 
 //---------------------------------------------------------------
