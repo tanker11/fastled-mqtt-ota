@@ -43,6 +43,11 @@ void subscribeToTopics() {
   client.loop();
   client.subscribe(TOPIC_ALL_SETURL);
   Serial.println("Subscribed to [" TOPIC_ALL_SETURL "] topic");
+  client.loop();
+  client.subscribe(TOPIC_BGRP_FASTLED);
+  Serial.println("Subscribed to [" TOPIC_BGRP_FASTLED "] topic");
+
+
 }
 
 
@@ -158,7 +163,9 @@ void processRecMessage() {
   bool validContent = false;
 
   //FASTLED BRANCH
-  if (strcmp(recTopic, TOPIC_DEV_FASTLED) == 0) {
+
+
+  if ((strcmp(recTopic, TOPIC_DEV_FASTLED) == 0) || (strcmp(recTopic, TOPIC_BGRP_FASTLED) == 0)) {
     strcpy(recCommand, "");
     strcpy(recValue, "");
     Serial.println(TOPIC_DEV_FASTLED " branch");
@@ -176,10 +183,52 @@ void processRecMessage() {
     //If found, process it
     if (strcmp(recCommand, "ledmode") == 0) {
       if (LEDMode != ALARM) { //If LEDMode is not ALARM, change the mode
-        newColor=true; //this is needed for refreshing the color if a random is needed and we send the same command (used for CSTEADY)
-        prevLEDMode = LEDMode;
-        LEDMode = atoi(recValue);
-        if (LEDMode==CSTEADY) newColor=true;
+        newColor = true; //this is needed for refreshing the color if a random is needed and we send the same command (used for CSTEADY)
+
+        if (atoi(recValue) == 0) { //seems to be a zero value (note: this is also zero if the value is a string, so further check is necessary
+          if (strcmp(recValue, "0") != 0) { //it is a string after the ":", so further processing needed
+
+            Serial.println("String value");
+
+            if (strcmp(recValue, "WHITE_TEST") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = WHITE_TEST;
+              validContent = true;
+            }
+            if (strcmp(recValue, "BATHMIRROR") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = BATHMIRROR;
+              validContent = true;
+            }
+            if (strcmp(recValue, "BATHMIRRORG") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = BATHMIRRORG;
+              validContent = true;
+            }
+            if (strcmp(recValue, "PINK") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = PINK;
+              validContent = true;
+            }
+            if (strcmp(recValue, "NOISE_RND4") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = NOISE_RND4;
+              validContent = true;
+            }
+          }
+          else
+          { //it is indeed a zero value
+            validContent = true;
+            prevLEDMode = LEDMode;
+            LEDMode = atoi(recValue);
+          }
+        } else
+        { //this is a valid integer value
+          validContent = true;
+          prevLEDMode = LEDMode;
+          LEDMode = atoi(recValue);
+        }
+        if (LEDMode == CSTEADY) newColor = true;
         Serial.printf("ledmode:%d\n", LEDMode);
       } else { //if in ALARM mode, change the prevLEDMode instead, then it will go back to the new prevMode after the ALARM status
         prevLEDMode = atoi(recValue);
@@ -199,6 +248,11 @@ void processRecMessage() {
       MAX_BRIGHTNESS = atoi(recValue);
       Serial.printf("brightness:%d\n", MAX_BRIGHTNESS);
       FastLED.setBrightness(MAX_BRIGHTNESS);
+    }
+
+    if (strcmp(recCommand, "ledbrightness") == 0) {//set the value of the white LED strip (if available)
+      analogWrite(PWM_PIN, atoi(recValue));
+      Serial.printf("LED brightness:%d\n", atoi(recValue));
     }
 
     if (strcmp(recCommand, "saturation") == 0) {

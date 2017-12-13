@@ -1,12 +1,14 @@
 void setLEDMode() {
-  // Add entropy to random number generator; we use a lot of it.  
+  // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy( random(5));
 
   switch (LEDMode) {
     case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; bSpeedMod = 1; speedMod = 1; break;
     case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); speedMod = 1; break;
     //case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(false, CRGB::Pink); break; //needs newColor to be true for one cycle!!!
-    case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(true,0); break; //needs newColor to be true for one cycle!!!
+    case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(true, 0); break; //needs newColor to be true for one cycle!!!
+    case BATHMIRROR: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255));  break; //CHSV(90,140,255) szép aqua lesz a tükrön
+    case BATHMIRRORG: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255)); addGlitter(20); break; //CHSV(90,140,255) szép aqua lesz a tükrön
     case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbow(); pastelizeColors(); speedMod = 1; break;
     case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbowWithGlitter(); pastelizeColors(); speedMod = 1; break;
     case GLITTERONLY: gHueRoll = false; scaleMod = 3; bSpeedMod = 20; satMod = 1; glitterOnly();  break;
@@ -502,9 +504,9 @@ void mapNoiseToLEDsUsingPalette()
 
 
 void handleNoise() {
-//Check if we are in lightning mode, because then pause times should be inserted
+  //Check if we are in lightning mode, because then pause times should be inserted
   bool doLoop = true;
-  if (LEDMode == NOISE_LIGHTNING) { 
+  if (LEDMode == NOISE_LIGHTNING) {
     int sum = 0;
     for (int i = 0; i < NUM_LEDS; i++) { //we check if the current state is all black
       sum += leds[i];
@@ -520,7 +522,7 @@ void handleNoise() {
   }
 
 
-  
+
   if (doLoop) {
     // generate noise data
     fillnoise8();

@@ -29,6 +29,7 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #include <FastLED.h>
 // Another line is needed at setup to avoid Wifi sleep in the setup section: WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
+#define PWM_PIN      5 //!!! ez azért, mert nemFastLED pin!!!
 
 #define LED_PIN1     5
 #define LED_PIN2     6
@@ -37,11 +38,11 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int MAX_BRIGHTNESS =  32;
+int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 8;
+const uint8_t kMatrixWidth  = 1; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 44;
 const bool    kMatrixSerpentineLayout = false;
 const bool sinusoid = true;
 
@@ -49,7 +50,7 @@ const bool sinusoid = true;
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      5000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
@@ -59,7 +60,7 @@ const int FW_VERSION = 1002;
 char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
-#define ALIAS "alma"
+#define ALIAS "bathmirror"
 #define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
 #define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
 #define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
@@ -69,21 +70,23 @@ char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to 
 #define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
 #define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
 
+#define TOPIC_BGRP_FASTLED "/bath/fastled" //used for bathroom group
+
 #define TOPIC_ALL_SETURL "/all/seturl"
 #define TOPIC_ALL_ALARM "/all/alarm"
 #define TOPIC_ALL_FOTA "/all/fota"
 #define TOPIC_ALL_RGB "/all/rgb"
 
 //WiFi variables
-const char* ssid = "testm";
-const char* password = "12345678";
+const char* ssid = "csirkelab";
+const char* password = "robirobi";
 const char* alias = ALIAS;
 const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
 //MQTT variables
 // Replace with the IP address of your MQTT server
-IPAddress mqttServerIP(192, 168, 1, 1);
-//IPAddress mqttServerIP(172, 29, 97, 124);
+IPAddress mqttServerIP(192, 168, 0, 2);
+//IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -104,7 +107,7 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {/*0..9 */  OFF, CSTEADY, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, SLOWRUNLIGHT,
+enum {/*0..9 */  OFF, CSTEADY, BATHMIRROR, BATHMIRRORG, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, SLOWRUNLIGHT,
                  /*10..19 */ FASTRUNLIGHT, ACCUMLIGHT, INVERSEGLITTER, PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT,
                  /*20..31 */  RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
                  _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
@@ -480,6 +483,9 @@ void setup()
   FastLED.setMaxPowerInVoltsAndMilliamps(5, MILLI_AMPERE); //5Volt LEDs
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
+
+pinMode(PWM_PIN,OUTPUT);
+  
   Serial.println("Booting...");
 
   //KeySwitch init
@@ -517,6 +523,17 @@ void setup()
   myAmberLight->setElements(round(NUM_LEDS / 3), round((NUM_LEDS * 2 / 3) - 1), 16, sinusoid); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
   myGreenLight = new steadyLight();
   myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
+  
+// FastLED provides these pre-conigured incandescent color profiles:
+//     Candle, Tungsten40W, Tungsten100W, Halogen, CarbonArc,
+//     HighNoonSun, DirectSunlight, OvercastSky, ClearBlueSky,
+// FastLED provides these pre-configured gaseous-light color profiles:
+//     WarmFluorescent, StandardFluorescent, CoolWhiteFluorescent,
+//     FullSpectrumFluorescent, GrowLightFluorescent, BlackLightFluorescent,
+//     MercuryVapor, SodiumVapor, MetalHalide, HighPressureSodium,
+// FastLED also provides an "Uncorrected temperature" profile
+//    UncorrectedTemperature;
+  if (ALIAS=="bathmirror")  FastLED.setTemperature( Tungsten40W );
 
 } //****************END SETUP
 
