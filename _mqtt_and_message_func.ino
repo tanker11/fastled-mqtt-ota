@@ -29,17 +29,11 @@ void subscribeToTopics() {
   client.subscribe(TOPIC_DEV_FOTA);
   Serial.println("Subscribed to [" TOPIC_DEV_FOTA "] topic");
   client.loop();
-  client.subscribe(TOPIC_DEV_RGB);
-  Serial.println("Subscribed to [" TOPIC_DEV_RGB "] topic");
-  client.loop();
   client.subscribe(TOPIC_ALL_ALARM);
   Serial.println("Subscribed to [" TOPIC_ALL_ALARM "] topic");
   client.loop();
   client.subscribe(TOPIC_ALL_FOTA);
   Serial.println("Subscribed to [" TOPIC_ALL_FOTA "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_RGB);
-  Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
   client.loop();
   client.subscribe(TOPIC_ALL_SETURL);
   Serial.println("Subscribed to [" TOPIC_ALL_SETURL "] topic");
@@ -189,7 +183,11 @@ void processRecMessage() {
           if (strcmp(recValue, "0") != 0) { //it is a string after the ":", so further processing needed
 
             Serial.println("String value");
-
+            if (strcmp(recValue, "CSTEADY") == 0) {
+              prevLEDMode = LEDMode;
+              LEDMode = CSTEADY;
+              validContent = true;
+            }
             if (strcmp(recValue, "WHITE_TEST") == 0) {
               prevLEDMode = LEDMode;
               LEDMode = WHITE_TEST;
@@ -256,11 +254,20 @@ void processRecMessage() {
     }
 
     if (strcmp(recCommand, "saturation") == 0) {
-      globalSaturation = atoi(recValue);
-      if (globalSaturation > 255) globalSaturation = 255;
-      if (globalSaturation < 0) globalSaturation = 0;
+      globalSaturation = constrain(atoi(recValue),0,255);
       Serial.printf("saturation:%d\n", globalSaturation);
-
+    }
+    if (strcmp(recCommand, "scale") == 0) {
+      scale = constrain(atoi(recValue),0,255);
+      Serial.printf("scale:%d\n", scale);
+    }
+        if (strcmp(recCommand, "bspeed") == 0) {
+      blendSpeed = constrain(atoi(recValue),0,255);
+      Serial.printf("blendspeed:%d\n", blendSpeed);
+    }
+            if (strcmp(recCommand, "bpm") == 0) {
+      BeatsPerMinute = constrain(atoi(recValue),0,255);
+      Serial.printf("bpm:%d\n", BeatsPerMinute);
     }
 
 
@@ -401,7 +408,7 @@ void processRecMessage() {
 
   if (strcmp(recTopic, TOPIC_DEV_ALARM) == 0 || strcmp(recTopic, TOPIC_ALL_ALARM) == 0) {
     Serial.println("ALARM branch");
-    if (strcmp(recMsg, "off") == 0) { //command received for switching OFF blinking ALARM and go back to previous mode
+    if ((strcmp(recMsg, "off") == 0)||(strcmp(recMsg, "-2") == 0)) { //command received for switching OFF blinking ALARM and go back to previous mode. Note: "-2" is an easy to send message from Node-red (it is defined there), so another way to switch alarm off
       LEDMode = prevLEDMode;
       Serial.println("ALARM off");
       Serial.printf("ledmode:%d\n", LEDMode);

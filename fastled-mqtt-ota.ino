@@ -41,8 +41,8 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 1; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 44;
+const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 const bool sinusoid = true;
 
@@ -68,25 +68,24 @@ char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to 
 #define TOPIC_DEV_FASTLED "/device/" ALIAS "/fastled"
 #define TOPIC_DEV_ALARM "/device/" ALIAS "/alarm"
 #define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
-#define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
 
 #define TOPIC_BGRP_FASTLED "/bath/fastled" //used for bathroom group
 
 #define TOPIC_ALL_SETURL "/all/seturl"
 #define TOPIC_ALL_ALARM "/all/alarm"
 #define TOPIC_ALL_FOTA "/all/fota"
-#define TOPIC_ALL_RGB "/all/rgb"
+
 
 //WiFi variables
-const char* ssid = "csirkelab";
-const char* password = "robirobi";
+const char* ssid = "testm";
+const char* password = "12345678";
 const char* alias = ALIAS;
 const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
 //MQTT variables
 // Replace with the IP address of your MQTT server
-IPAddress mqttServerIP(192, 168, 0, 2);
-//IPAddress mqttServerIP(192, 168, 1, 1);
+//IPAddress mqttServerIP(192, 168, 0, 2);
+IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -112,7 +111,7 @@ enum {/*0..9 */  OFF, CSTEADY, BATHMIRROR, BATHMIRRORG, RAINBOW, RAINBOW_G, GLIT
                  /*20..31 */  RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
                  _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
      }; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
-     
+
 enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
@@ -127,14 +126,14 @@ float globalPosShift = 0;
 float speedMod = 1; //modifies the speed factor according to the LEDMode
 float scaleMod = 1; //modifies the scale factor according to the LEDMode
 float satMod = 1; //modifies the saturation factor according to the LEDMode
-float bSpeedMod =1; //modifies blending speed factor according to the 
+float bSpeedMod = 1; //modifies blending speed factor according to the
 float modifiedSpeed, modifiedScale, modifiedSaturation, modifiedBlendSpeed; //modified values after the global and modifier factor multiplications
 int globalSaturation = 255;
 int oldGlobalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
 uint8_t oldBlendSpeed = 10; //defines palette cross-blend speed
 int blendIndex; //index of position between the color1 and color2 where we are doing a blended smooth conversion (CSTEADY mode)
-bool newColor=false;
+bool newColor = false;
 
 // Scale determines how far apart the pixels in our noise matrix are.  Try
 // changing these values around to see how it affects the motion of the display.  The
@@ -389,6 +388,7 @@ class steadyLight
     boolean blinkStatus = true;
     int fromLED, toLED; //stores the start and end point of the range of LEDs this instance handles
     short LEDColorIndex;
+    bool alarmWhite;
     short elementDim = 0; //dim values for the element
     bool sinusoidal;
 
@@ -401,6 +401,7 @@ class steadyLight
 
     void setColor (int colorIndex) { //set color only
       LEDColorIndex = colorIndex;
+      if (colorIndex == -1) alarmWhite = true; else alarmWhite = false;  //if alarm mode is -1, it means more than one alarm are in active status. This case we will show white blinking light
     }
 
 
@@ -439,7 +440,14 @@ class steadyLight
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
-        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim,0,255), LINEARBLEND);
+        
+        if (alarmWhite) { // "-1" case, when more than alamr situation is active. Then we need to show white color
+        leds[currentLED] = ColorFromPalette( HeatColors_p, 255 , constrain(posBrightness + elementDim, 0, 255), NOBLEND);   //pick a pre-defined white color
+        }
+        else
+        
+        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim, 0, 255), LINEARBLEND);  
+        
       }
     }
 };
@@ -484,8 +492,8 @@ void setup()
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
 
-pinMode(PWM_PIN,OUTPUT);
-  
+  pinMode(PWM_PIN, OUTPUT);
+
   Serial.println("Booting...");
 
   //KeySwitch init
@@ -523,17 +531,17 @@ pinMode(PWM_PIN,OUTPUT);
   myAmberLight->setElements(round(NUM_LEDS / 3), round((NUM_LEDS * 2 / 3) - 1), 16, sinusoid); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
   myGreenLight = new steadyLight();
   myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
-  
-// FastLED provides these pre-conigured incandescent color profiles:
-//     Candle, Tungsten40W, Tungsten100W, Halogen, CarbonArc,
-//     HighNoonSun, DirectSunlight, OvercastSky, ClearBlueSky,
-// FastLED provides these pre-configured gaseous-light color profiles:
-//     WarmFluorescent, StandardFluorescent, CoolWhiteFluorescent,
-//     FullSpectrumFluorescent, GrowLightFluorescent, BlackLightFluorescent,
-//     MercuryVapor, SodiumVapor, MetalHalide, HighPressureSodium,
-// FastLED also provides an "Uncorrected temperature" profile
-//    UncorrectedTemperature;
-  if (ALIAS=="bathmirror")  FastLED.setTemperature( Tungsten40W );
+
+  // FastLED provides these pre-conigured incandescent color profiles:
+  //     Candle, Tungsten40W, Tungsten100W, Halogen, CarbonArc,
+  //     HighNoonSun, DirectSunlight, OvercastSky, ClearBlueSky,
+  // FastLED provides these pre-configured gaseous-light color profiles:
+  //     WarmFluorescent, StandardFluorescent, CoolWhiteFluorescent,
+  //     FullSpectrumFluorescent, GrowLightFluorescent, BlackLightFluorescent,
+  //     MercuryVapor, SodiumVapor, MetalHalide, HighPressureSodium,
+  // FastLED also provides an "Uncorrected temperature" profile
+  //    UncorrectedTemperature;
+  if (ALIAS == "bathmirror")  FastLED.setTemperature( Tungsten40W );
 
 } //****************END SETUP
 

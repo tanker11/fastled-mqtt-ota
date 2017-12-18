@@ -1,6 +1,6 @@
 void setLEDMode() {
   // Add entropy to random number generator; we use a lot of it.
-  random16_add_entropy( random(5));
+  random16_add_entropy( 8000);
 
   switch (LEDMode) {
     case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; bSpeedMod = 1; speedMod = 1; break;
@@ -13,15 +13,15 @@ void setLEDMode() {
     case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbowWithGlitter(); pastelizeColors(); speedMod = 1; break;
     case GLITTERONLY: gHueRoll = false; scaleMod = 3; bSpeedMod = 20; satMod = 1; glitterOnly();  break;
     case PINK: gHueRoll = false; bSpeedMod = 1; satMod = 0.8; steady(0, NUM_LEDS - 1, CRGB::Red); pastelizeColors(); break;
-    case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.02; bSpeedMod = 1; satMod = 1; confetti();  break;
-    case SINELON: gHueRoll = true; scaleMod = 10; speedMod = 0.3; bSpeedMod = 0.5; satMod = 1; sinelon();  break;
-    case JUGGLE: gHueRoll = true; scaleMod = 20; speedMod = 0.1; bSpeedMod = 0.1; satMod = 1; juggle();  break;
-    case SLOWRUNLIGHT: gHueRoll = true; scaleMod = 20; speedMod = 0.4; bSpeedMod = 12.5; satMod = 1; runningLight();  break; //slow steps to next pixel with glowing colors
-    case FASTRUNLIGHT: gHueRoll = true; scaleMod = 5; speedMod = 4; bSpeedMod = 0.5; satMod = 1; runningLight();  break; //moderate sawtooth sweep
-    case ACCUMLIGHT: gHueRoll = true; scaleMod = 10; speedMod = 1; bSpeedMod = 0.1; satMod = 1; accumLight();  break;
-    case INVERSEGLITTER: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(); break; //colored blink in a background color
-    case HEARTBEAT: gHueRoll = false; scaleMod = 1 ; bSpeedMod = 2; satMod = 1; heartBeat(0);  break; //0=> red
-    case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1; bSpeedMod = 8; satMod = 1; randomFirePalette(5000); mirroredFire();  break; //speed->COOLING  scale->SPARKING
+    case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.02; bSpeedMod = 1; satMod = 1; confetti();pastelizeColors();  break;
+    case SINELON: gHueRoll = true; scaleMod = 10; speedMod = 0.3; bSpeedMod = 0.5; satMod = 1; sinelon();pastelizeColors();  break;
+    case JUGGLE: gHueRoll = true; scaleMod = 20; speedMod = 0.1; bSpeedMod = 0.1; satMod = 1; juggle(); pastelizeColors(); break;
+    case SLOWRUNLIGHT: gHueRoll = true; scaleMod = 20; speedMod = 0.4; bSpeedMod = 12.5; satMod = 1; runningLight(); pastelizeColors(); break; //slow steps to next pixel with glowing colors
+    case FASTRUNLIGHT: gHueRoll = true; scaleMod = 5; speedMod = 4; bSpeedMod = 0.5; satMod = 1; runningLight();pastelizeColors();  break; //moderate sawtooth sweep
+    case ACCUMLIGHT: gHueRoll = true; scaleMod = 10; speedMod = 1; bSpeedMod = 0.1; satMod = 1; accumLight(); pastelizeColors(); break;
+    case INVERSEGLITTER: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter();pastelizeColors(); break; //colored blink in a background color
+    case HEARTBEAT: gHueRoll = false; scaleMod = 1 ; bSpeedMod = 2; satMod = 1; heartBeat(0);pastelizeColors();  break; //0=> red
+    case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1; bSpeedMod = 8; satMod = 1; randomFirePalette(5000); mirroredFire(); pastelizeColors(); break; //speed->COOLING  scale->SPARKING
     case RND_WANDER: gHueRoll = false ; speedMod = 1; bSpeedMod = 6; satMod = 1; randomWander();  break;
     case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; bpm(); pastelizeColors(); break;
     case AQUAORANGE: setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255)); gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(CUBIC); pastelizeColors(); speedMod = 0.5; break;
@@ -107,7 +107,6 @@ void setLEDMode() {
   modifiedSaturation = globalSaturation * satMod; //modifying the saturation according to the pattern we want
   modifiedBlendSpeed = blendSpeed * bSpeedMod; //modifying the blend speed according to the pattern we want
 
-
   if (LEDMode != oldLEDMode) {
     Serial.println("LED MODE CHANGED");
     LEDModeChanged = true;
@@ -163,7 +162,8 @@ void pastelizeColors() {
   //adds proportion of WHITE tint depending on the globalSaturation number
   //makes similar behavior to HSV saturation variable, but in case of palette coloring, there is no such possibility
   for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] += CRGB(255 - modifiedSaturation, 255 - modifiedSaturation, 255 - modifiedSaturation);
+    int value=leds[i];
+    if (value!=0) leds[i] += CRGB(255 - modifiedSaturation, 255 - modifiedSaturation, 255 - modifiedSaturation); //if not black, saturate the color
 
 
 
@@ -194,7 +194,7 @@ void blendToNewColor(bool random, CRGB color) {
 
   blendIndex = blendIndex + modifiedBlendSpeed;
   blendIndex = constrain(blendIndex, 0, 255); //keeps the value between 0 and 255
-  Serial.println(blendIndex);
+  //Serial.println(blendIndex);
   for (int i = 0; i < NUM_LEDS + 1; i++) {
     leds[i] = blend(ColorFromPalette(currentPalette, 0), ColorFromPalette(targetPalette, 0), blendIndex);
   }
