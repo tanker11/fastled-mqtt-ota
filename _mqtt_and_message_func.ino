@@ -37,10 +37,11 @@ void subscribeToTopics() {
   client.loop();
   client.subscribe(TOPIC_ALL_SETURL);
   Serial.println("Subscribed to [" TOPIC_ALL_SETURL "] topic");
-  client.loop();
-  client.subscribe(TOPIC_BGRP_FASTLED);
-  Serial.println("Subscribed to [" TOPIC_BGRP_FASTLED "] topic");
-
+  if ((alias == "bathmirror") || (alias == "bathlamp")) {
+    client.loop();
+    client.subscribe(TOPIC_BGRP_FASTLED);
+    Serial.println("Subscribed to [" TOPIC_BGRP_FASTLED "] topic");
+  }
 
 }
 
@@ -223,8 +224,12 @@ void processRecMessage() {
         } else
         { //this is a valid integer value
           validContent = true;
-          prevLEDMode = LEDMode;
-          LEDMode = atoi(recValue);
+          if (atoi(recValue) < _DIVIDER_) {
+            prevLEDMode = LEDMode;
+            LEDMode = atoi(recValue);
+          }
+          else
+            Serial.println("too high number for mode!");
         }
         if (LEDMode == CSTEADY) newColor = true;
         Serial.printf("ledmode:%d\n", LEDMode);
@@ -254,19 +259,19 @@ void processRecMessage() {
     }
 
     if (strcmp(recCommand, "saturation") == 0) {
-      globalSaturation = constrain(atoi(recValue),0,255);
+      globalSaturation = constrain(atoi(recValue), 0, 255);
       Serial.printf("saturation:%d\n", globalSaturation);
     }
     if (strcmp(recCommand, "scale") == 0) {
-      scale = constrain(atoi(recValue),0,255);
+      scale = constrain(atoi(recValue), 0, 255);
       Serial.printf("scale:%d\n", scale);
     }
-        if (strcmp(recCommand, "bspeed") == 0) {
-      blendSpeed = constrain(atoi(recValue),0,255);
+    if (strcmp(recCommand, "bspeed") == 0) {
+      blendSpeed = constrain(atoi(recValue), 0, 255);
       Serial.printf("blendspeed:%d\n", blendSpeed);
     }
-            if (strcmp(recCommand, "bpm") == 0) {
-      BeatsPerMinute = constrain(atoi(recValue),0,255);
+    if (strcmp(recCommand, "bpm") == 0) {
+      BeatsPerMinute = constrain(atoi(recValue), 0, 255);
       Serial.printf("bpm:%d\n", BeatsPerMinute);
     }
 
@@ -408,15 +413,22 @@ void processRecMessage() {
 
   if (strcmp(recTopic, TOPIC_DEV_ALARM) == 0 || strcmp(recTopic, TOPIC_ALL_ALARM) == 0) {
     Serial.println("ALARM branch");
-    if ((strcmp(recMsg, "off") == 0)||(strcmp(recMsg, "-2") == 0)) { //command received for switching OFF blinking ALARM and go back to previous mode. Note: "-2" is an easy to send message from Node-red (it is defined there), so another way to switch alarm off
+    if ((LEDMode == ALARM) && ((strcmp(recMsg, "off") == 0) || (strcmp(recMsg, "-2") == 0))) { //command received for switching OFF blinking ALARM and go back to previous mode. Note: "-2" is an easy to send message from Node-red (it is defined there), so another way to switch alarm off
+      //it should be in ALM mode otherwise no need to switch back to previous mode
       LEDMode = prevLEDMode;
       Serial.println("ALARM off");
       Serial.printf("ledmode:%d\n", LEDMode);
       validContent = true;
-    } else
+    }
+    else if ((LEDMode != ALARM) && ((strcmp(recMsg, "off") == 0) || (strcmp(recMsg, "-2") == 0))) {
+      Serial.println("no need to off ALARM MODE");
+      validContent = true;
+    }
+    else if (LEDMode != ALARM)
     {
       Serial.printf("ALARM MODE:%d\n", atoi(recMsg));
-      if (LEDMode != ALARM) prevLEDMode = LEDMode;
+      // if (LEDMode != ALARM)
+      prevLEDMode = LEDMode;
       LEDMode = ALARM;
       almMode = atoi(recMsg);
       Serial.printf("ledmode:%d\n", LEDMode);

@@ -41,16 +41,16 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 8;
+const uint8_t kMatrixWidth  = 13; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 4;
 const bool    kMatrixSerpentineLayout = false;
-const bool sinusoid = true;
+const bool sinusoid = false;
 
 
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      5000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
@@ -60,7 +60,7 @@ const int FW_VERSION = 1002;
 char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
-#define ALIAS "bathmirror"
+#define ALIAS "bathlamp"
 #define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
 #define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
 #define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
@@ -77,15 +77,15 @@ char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to 
 
 
 //WiFi variables
-const char* ssid = "testm";
-const char* password = "12345678";
+const char* ssid = "csirkelab";
+const char* password = "robirobi";
 const char* alias = ALIAS;
 const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
 //MQTT variables
 // Replace with the IP address of your MQTT server
-//IPAddress mqttServerIP(192, 168, 0, 2);
-IPAddress mqttServerIP(192, 168, 1, 1);
+IPAddress mqttServerIP(192, 168, 0, 2);
+//IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -106,9 +106,10 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {/*0..9 */  OFF, CSTEADY, BATHMIRROR, BATHMIRRORG, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, SLOWRUNLIGHT,
-                 /*10..19 */ FASTRUNLIGHT, ACCUMLIGHT, INVERSEGLITTER, PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, TRAFFICLIGHT, AMBERBLINK, HEARTBEAT,
-                 /*20..31 */  RND_WANDER, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4, NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
+enum {/*0..9 */  OFF, CSTEADY, BATHMIRROR, BATHMIRRORG, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON,
+                 /*10..19 */  JUGGLE, SLOWRUNLIGHT, FASTRUNLIGHT, ACCUMLIGHT, INVERSEGLITTER, INVERSEXMAS, PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, 
+                 /*20..29 */  TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRESTOP, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4,
+                 /*30..    */  NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
                  _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
      }; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 
@@ -117,6 +118,8 @@ int LEDMode = OFF;
 int prevLEDMode = OFF;
 int oldLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
+
+bool reverseColor = false; //in some cases the colours are reversed if this is true
 
 float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
@@ -212,7 +215,7 @@ int accumCurrentPos; //shows the position of the current moving LED
 int accumFillPos; //shows the current position of the filled status
 
 //Variables for InverseGlitter
-int invPos = 0;
+int invPos[5];
 
 //Variables for lightning
 unsigned long lightningTime;
@@ -253,14 +256,24 @@ void setBlackAndWhiteStripedPalette()
 void randomFirePalette (unsigned long timing) { //selects from gradient palettes with dark and bright end for fire simulations
 
   EVERY_N_MILLISECONDS( timing ) { //new random palette every n seconds. In order to avoid wait time, we apply the palette immediately on mode change
-    randomFireNumber = random8(4);
+    randomFireNumber = random8(8);
+      EVERY_N_MILLISECONDS( timing * 5 ) {//we do this rarely as flipping the value causes sudden color flip
+    if (random8(100) > 50) reverseColor = !reverseColor; //with 50 per cent probability reverse the colors (used on fixed palette colors in REVERSEXMAS for example)
+    
+    //Serial.println(reverse);
+  }
 
   }
-  randomFireNumber = 2;
+  //randomFireNumber = 7;
   switch (randomFireNumber) {
     case 0: targetPalette = HeatColors_p; break; //traditional fire colors
     case 1: targetPalette = CRGBPalette16( CRGB::Black, CHSV(0, 180, 255), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink fire
     case 2: targetPalette = CRGBPalette16( CRGB::Black, CHSV(25, 255, 255), CHSV(28, 200, 255) , CHSV(32, 150, 255)); break; //orange fire
+    case 3: targetPalette = CRGBPalette16( CRGB::Black, CHSV(200, 255, 180), CHSV(28, 255, 255) , CHSV(32, 200, 255)); break; //orange-purple fire
+    case 4: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(28, 255, 255) , CHSV(32, 200, 255)); break; //orange-aqua fire
+    case 5: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 255, 255) , CHSV(0, 210, 255)); break; //red-aqua fire
+    case 6: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink-aqua fire
+    case 7: targetPalette = CRGBPalette16( CRGB::Black, CRGB::MidnightBlue, CRGB::Aquamarine , CRGB::Aqua); break; //midnightblue-aqua fire
     default: targetPalette = HeatColors_p; break; //traditional fire colors
   }
 }
@@ -440,14 +453,14 @@ class steadyLight
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
-        
+
         if (alarmWhite) { // "-1" case, when more than alamr situation is active. Then we need to show white color
-        leds[currentLED] = ColorFromPalette( HeatColors_p, 255 , constrain(posBrightness + elementDim, 0, 255), NOBLEND);   //pick a pre-defined white color
+          leds[currentLED] = ColorFromPalette( HeatColors_p, 255 , constrain(posBrightness + elementDim, 0, 255), NOBLEND);   //pick a pre-defined white color
         }
         else
-        
-        leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim, 0, 255), LINEARBLEND);  
-        
+
+          leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim, 0, 255), LINEARBLEND);
+
       }
     }
 };
