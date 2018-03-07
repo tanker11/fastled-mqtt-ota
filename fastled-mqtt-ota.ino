@@ -41,8 +41,8 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 13; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 4;
+const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
 const bool sinusoid = false;
 
@@ -50,7 +50,7 @@ const bool sinusoid = false;
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      3000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      2000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
@@ -84,7 +84,7 @@ const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, 
 
 //MQTT variables
 // Replace with the IP address of your MQTT server
-IPAddress mqttServerIP(192, 168, 0, 2);
+IPAddress mqttServerIP(192, 168, 0, 1);
 //IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
@@ -106,11 +106,9 @@ PubSubClient client(wclient);
 
 // FASTLED VARIABLES
 
-enum {/*0..9 */  OFF, CSTEADY, BATHMIRROR, BATHMIRRORG, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON,
-                 /*10..19 */  JUGGLE, SLOWRUNLIGHT, FASTRUNLIGHT, ACCUMLIGHT, INVERSEGLITTER, INVERSEXMAS, PINK, AQUAORANGE, AQUAGREEN, AQUAGREEN_NOISE, 
-                 /*20..29 */  TRAFFICLIGHT, AMBERBLINK, HEARTBEAT, RND_WANDER, FIRESTOP, FIRE, NOISE_RND1, NOISE_RND2, NOISE_RND3, NOISE_RND4,
-                 /*30..    */  NOISE_OCEAN, NOISE_LAVA, NOISE_PARTY, NOISE_BW, NOISE_PINS, NOISE_LIGHTNING,
-                 _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
+enum {/*0..9 */  OFF, CSTEADY, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, ACCUMLIGHT,
+                  /*10..19 */ INVERSEGLITTER, PINK, WAVESQ, WAVE, RND_WANDER, FIRE, FIRESTOP, NOISE_FIRE, NOISE_RND1BK, NOISE_RND4FULL, 
+                  /*20..29 */ AQUAGREEN_NOISE, NOISE_OCEAN, NOISE_LIGHTNING, TRAFFICLIGHT, AMBERBLINK, _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
      }; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 
 enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
@@ -118,7 +116,6 @@ int LEDMode = OFF;
 int prevLEDMode = OFF;
 int oldLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
-
 bool reverseColor = false; //in some cases the colours are reversed if this is true
 
 float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
@@ -145,6 +142,8 @@ bool newColor = false;
 // Megjegyzés: ezt használjuk már animációkban is (nem csak 1-10-ig), ott átszámoljuk a megfelelő skálára
 int scale = 10; // scale is set dynamically once we've started up
 int oldScale = 10;
+
+
 // The 16 bit version of our coordinates
 static uint16_t x;
 static uint16_t y;
@@ -161,6 +160,9 @@ CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs,
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
 CRGBPalette16 targetPalette( CRGB::Black );  //black palette
 TBlendType    currentBlending;
+
+static byte heat[NUM_LEDS]; //contains "heat" indication, that is the level of change on the pallette. heat=0 means background color, heat=255 means the 'other end' of the colour pallette
+short blendPosA, blendPosB; //positions of the two colors on the pallette, when we use fadingToBackground
 
 // This is the array that we keep our computed noise values in
 uint8_t noise[MAX_DIMENSION][MAX_DIMENSION];
@@ -182,12 +184,7 @@ unsigned long tlMillis; //Timing millis for Traffic Light
 //Variable for emergency mode
 short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white all LEDs
 
-//Variables for Heart_Blood mode
-#define bloodSat  255  // Blood staturation [0-255]
-#define baseBrightness  0  // Brightness of LEDs when not pulsing. Set to 0 for off.
-#define flowDirection -1   // Use either 1 or -1 to set flow direction
-#define pulseFade 30  // How long the pulse takes to fade out.  Higher value is longer.
-#define pulseOffset 200  // Delay before second pulse in ms.  Higher value is more delay.
+
 
 //Variables for FIRE
 bool gReverseDirection = false;
@@ -208,14 +205,14 @@ int16_t positionC = NUM_LEDS * 4 / 6; // Set initial start position of C pixel
 int8_t deltaA = 1;           // Using a negative value will move pixels backwards.
 int8_t deltaB = 1;           // Using a negative value will move pixels backwards.
 int8_t deltaC = 1;           // Using a negative value will move pixels backwards.
-#define holdTime 80   // Milliseconds to hold position before advancing
+//#define holdTime 100   // Milliseconds to hold position before advancing
 
 //Variables for accumLight
 int accumCurrentPos; //shows the position of the current moving LED
 int accumFillPos; //shows the current position of the filled status
 
 //Variables for InverseGlitter
-int invPos[5];
+int invPos=0;
 
 //Variables for lightning
 unsigned long lightningTime;

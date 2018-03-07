@@ -7,8 +7,8 @@ void setLEDMode() {
     case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); speedMod = 1; break;
     //case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(false, CRGB::Pink); break; //needs newColor to be true for one cycle!!!
     case CSTEADY: gHueRoll = false; bSpeedMod = 0.1; blendToNewColor(true, 0); break; //needs newColor to be true for one cycle!!!
-    case BATHMIRROR: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255));  break; //CHSV(90,140,255) szép aqua lesz a tükrön
-    case BATHMIRRORG: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255)); addGlitter(20); break; //CHSV(90,140,255) szép aqua lesz a tükrön
+    //case BATHMIRROR: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255));  break; //CHSV(90,140,255) szép aqua lesz a tükrön
+    //case BATHMIRRORG: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(90, 140, 255)); addGlitter(20); break; //CHSV(90,140,255) szép aqua lesz a tükrön
     case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbow();  speedMod = 1; break;
     case RAINBOW_G: targetPalette = RainbowColors_p; gHueRoll = true; bSpeedMod = 1; satMod = 1; rainbowWithGlitter();  speedMod = 1; break;
     case GLITTERONLY: gHueRoll = false; scaleMod = 3; bSpeedMod = 20; satMod = 1; glitterOnly();  break;
@@ -16,28 +16,30 @@ void setLEDMode() {
     case CONFETTI: gHueRoll = true; scaleMod = 0.5; speedMod = 0.02; bSpeedMod = 1; satMod = 1; confetti();  break;
     case SINELON: gHueRoll = true; scaleMod = 10; speedMod = 0.3; bSpeedMod = 0.5; satMod = 1; sinelon();  break;
     case JUGGLE: gHueRoll = true; scaleMod = 20; speedMod = 0.1; bSpeedMod = 0.1; satMod = 1; juggle();  break;
-    case SLOWRUNLIGHT: gHueRoll = true; scaleMod = 20; speedMod = 0.4; bSpeedMod = 12.5; satMod = 1; runningLight();  break; //slow steps to next pixel with glowing colors
-    case FASTRUNLIGHT: gHueRoll = true; scaleMod = 5; speedMod = 4; bSpeedMod = 0.5; satMod = 1; runningLight();  break; //moderate sawtooth sweep
-    case ACCUMLIGHT: gHueRoll = true; scaleMod = 10; speedMod = 1; bSpeedMod = 0.1; satMod = 1; accumLight();  break;
-    case INVERSEGLITTER: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(true); break; //colored blink in a background color
-    case INVERSEXMAS: randomFirePalette(20000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod =0.5; satMod = 1; inverseGlitter(false); break; //false means colors from the randomFirePalettes (color position is different form the random one, see the inverseGlitter function
-    case HEARTBEAT: gHueRoll = false; scaleMod = 1 ; bSpeedMod = 2; satMod = 1; heartBeat(0);  break; //0=> red
+    //case SLOWRUNLIGHT: gHueRoll = true; scaleMod = 20; speedMod = 0.4; bSpeedMod = 12.5; satMod = 1; runningLight();  break; //slow steps to next pixel with glowing colors
+    //case FASTRUNLIGHT: gHueRoll = true; scaleMod = 5; speedMod = 4; bSpeedMod = 0.5; satMod = 1; runningLight();  break; //moderate sawtooth sweep
+    case ACCUMLIGHT: randomFirePalette(30000);gHueRoll = true; scaleMod = 10; speedMod = 1; bSpeedMod = 0.1; satMod = 1; accumLight();  break;
+    case INVERSEGLITTER: randomFirePalette(30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(true); break; //colored blink in a background color, true means random
+    //case INVERSEGLITTER: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(true); break; //colored blink in a background color, true means random
+    //case INVERSEXMAS: randomFirePalette(10000); gHueRoll = false; scaleMod = 1; speedMod = 1; bSpeedMod = 1; satMod = 1; inverseGlitter(false); break; //false means colors from the randomFirePalettes (color position is different form the random one, see the inverseGlitter function
+    //case HEARTBEAT: gHueRoll = false; scaleMod = 1 ; bSpeedMod = 2; satMod = 1; heartBeat(0);  break; //0=> red
     case FIRE: gHueRoll = false; scaleMod = 5; speedMod = 1; bSpeedMod = 8; satMod = 1; randomFirePalette(10000); mirroredFire(false);  break; //speed->COOLING  scale->SPARKING
     case FIRESTOP: gHueRoll = false; scaleMod = 5; speedMod = 1; bSpeedMod = 8; satMod = 1; randomFirePalette(10000); mirroredFire(true);  break; //speed->COOLING  scale->SPARKING
-    case RND_WANDER: gHueRoll = false ; speedMod = 1; bSpeedMod = 6; satMod = 1; randomWander();  break;
-    case BPM_PULSE: targetPalette = PartyColors_p; gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; bpm();  break;
-    case AQUAORANGE: setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255)); gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(CUBIC);  speedMod = 0.5; break;
-    case AQUAGREEN: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(SINUS);  speedMod = 1; break;
+    case RND_WANDER: randomFirePalette(30000); gHueRoll = false ; speedMod = 1; bSpeedMod = 6; satMod = 1; randomWander();  break;
+    case BPM_PULSE: randomFirePalette(30000); gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; bpm();  break;
+    case WAVESQ:  randomFirePalette(30000);/*setDualPalette(CHSV( 110, 255, 255), CHSV( 20, 255, 255));*/ gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(CUBIC);  speedMod = 0.4; break;
+    case WAVE: randomFirePalette(30000);/*setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255));*/ gHueRoll = false; bSpeedMod = 1; satMod = 1; dualColor(SINUS);  speedMod = 0.4; break;
     case AQUAGREEN_NOISE: setDualPalette(CHSV( 128, 255, 255), CHSV( 100, 255, 255)); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
     case NOISE_OCEAN: targetPalette = OceanColors_p; gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
-    case NOISE_PINS: RandomPalette(3, 5000); gHueRoll = false; scaleMod = 25; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors//bizsergés (needles and pins)
-    case NOISE_RND1: RandomPalette(1, 30000); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //1 color
-    case NOISE_RND2: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //2 colors
-    case NOISE_RND3: RandomPalette(3, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors
-    case NOISE_RND4: RandomPalette(4, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors
-    case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scaleMod = 1.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
-    case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
-    case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
+    case NOISE_FIRE: randomFirePalette(30000); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
+    //case NOISE_PINS: RandomPalette(3, 5000); gHueRoll = false; scaleMod = 25; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors//bizsergés (needles and pins)
+    case NOISE_RND1BK: RandomPalette(1, 30000); gHueRoll = false; scaleMod = 2.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //1 color
+    //case NOISE_RND2: RandomPalette(2, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //2 colors
+    //case NOISE_RND3: RandomPalette(3, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors
+    case NOISE_RND4FULL: RandomPalette(4, 30000); gHueRoll = false; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break; //3 colors
+    //case NOISE_LAVA: targetPalette = LavaColors_p; gHueRoll = false; scaleMod = 1.5; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
+    //case NOISE_PARTY: targetPalette = PartyColors_p; gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
+    //case NOISE_BW: setBlackAndWhiteStripedPalette(); gHueRoll = true; scaleMod = 2; speedMod = 1; bSpeedMod = 1; satMod = 1; handleNoise();  break;
     case NOISE_LIGHTNING: setLightningPalette(); gHueRoll = false; scaleMod = 0.1; speedMod = 3; bSpeedMod = 1; satMod = 1; handleNoise();  break;
     case EMERGENCY: /*Nothing to do here, handled separately*/ break;
     case TEST: gHueRoll = false; satMod = 1; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
@@ -198,20 +200,20 @@ void blendToNewColor(bool random, CRGB color) {
 void gradientRedGreen() {
   fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
 
-    FastLED.show();
-  //show_at_max_brightness_for_power();
+  //  FastLED.show();
+  show_at_max_brightness_for_power();
   //ugyanezt az is megcsinálja, hogy összesen két színt teszünk a palettára. És átfolyatja egymásba a színeket
 }
 
 void tripleBlink(CRGB color) {
   for (int j = 0; j < 3; j++) {
     fill_solid( leds, NUM_LEDS, color);
-    FastLED.show();
-    //show_at_max_brightness_for_power();
+    //FastLED.show();
+    show_at_max_brightness_for_power();
     delay(100);
     fill_solid( leds, NUM_LEDS, CRGB::Black);
-    FastLED.show();
-    //show_at_max_brightness_for_power();
+    //FastLED.show();
+    show_at_max_brightness_for_power();
     delay(100);
   }
 }
@@ -263,27 +265,60 @@ void rainbowWithGlitter()
   addGlitter(80); //eredetileg 80 volt a paraméter
 }
 
+
+//**************************************************************************
+  void fadeToBackgroundBy(int value, int startPos, int stopPos){
+  for ( int j = startPos; j < stopPos; j++) {
+    leds[j] = blend(ColorFromPalette( currentPalette, blendPosB), ColorFromPalette( currentPalette, blendPosA), 255 - heat[j]);  //go over all the affected LEDs and blend the color between the blendPosA and B at the level of "heat"
+    leds[j] = blend(leds[j], CRGB::White, 255 - modifiedSaturation); //blends with white to saturate the color
+    heat[j] = qsub8(heat[j],value); //go over all the LEDs between start and stop position and subtract from all heat valus saturating at 0 level.
+  }
+  }
+
+
+/*
+int blendSub(int input,int byValue){
+  input=input-byValue;
+  if (input<blendPosB) input=blendPosB;
+  return input;
+}*/
+
 void inverseGlitter(bool random) {
-  //it lits the background and a random position led with another color from the same palette (a 2-color palette)
-  if (random) {
-    fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 0, 255, LINEARBLEND));
-    for (int j = 0; j < 5; j++)    leds[invPos[j]] = ColorFromPalette(currentPalette, 64, 255, LINEARBLEND); //colors 5 LEDs
-  } else
-  {
-    if (reverseColor) {
-      fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 192, 255, NOBLEND));
-      for (int j = 0; j < 5; j++)    leds[invPos[j]] = ColorFromPalette(currentPalette, 64, 255, NOBLEND);
-    }
-    else {
-      fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 64, 255, NOBLEND));
-      for (int j = 0; j < 5; j++)    leds[invPos[j]] = ColorFromPalette(currentPalette, 192, 255, NOBLEND);
-    }
+  blendPosA=186;
+  blendPosB=51;
+  if (reverseColor) {
+  blendPosA=51;
+  blendPosB=186;  
   }
-  pastelizeColors();
-  EVERY_N_MILLISECONDS(1000) {
-    for (int j = 0; j < 5; j++) invPos[j] = random8(NUM_LEDS);
-  }
+    EVERY_N_MILLISECONDS(100) {
+     invPos = random8(NUM_LEDS);
+
+     heat[invPos]=255;
+    }
+    fadeToBackgroundBy(5,0,NUM_LEDS);
+
+  /*
+    //it lits the background and a random position led with another color from the same palette (a 2-color palette)
+    if (random) {
+     fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 0, 255, LINEARBLEND));
+     leds[invPos] = ColorFromPalette(currentPalette, 64, 255, LINEARBLEND);
+    } else
+    {
+     if (reverseColor) {
+       fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 192, 255, NOBLEND));
+       leds[invPos] = ColorFromPalette(currentPalette, 64, 255, NOBLEND);
+     }
+     else {
+       fill_solid( leds, NUM_LEDS, ColorFromPalette(currentPalette, 64, 255, NOBLEND));
+       leds[invPos] = ColorFromPalette(currentPalette, 192, 255, NOBLEND);
+     }
+    }
+    pastelizeColors();
+    EVERY_N_MILLISECONDS(500) {
+     invPos = random8(NUM_LEDS);
+    }*/
 }
+
 
 
 void glitterOnly()
@@ -364,12 +399,16 @@ void accumLight() {
   }
 
   for (int i = 0; i < accumFillPos; i++) { //fades the LEDs out where there is no accummulated dot
-    leds[i].fadeToBlackBy(modifiedScale);
+    leds[i].fadeToBlackBy(modifiedScale/2);
+  
   }
-
-  EVERY_N_MILLISECONDS(80) {  //####Ezt még meg kell javítani
-    leds[accumCurrentPos] = CHSV((255 / NUM_LEDS) * accumFillPos + gHue, modifiedSaturation, 255);
+  
+  
+  EVERY_N_MILLISECONDS(100) {  //####Ezt még meg kell javítani
+    //leds[accumCurrentPos] = CHSV((255 / NUM_LEDS) * accumFillPos + gHue, modifiedSaturation, 255);
+     leds[accumCurrentPos] = ColorFromPalette( currentPalette, 51);
     accumCurrentPos++; //step one
+    
     if (accumCurrentPos == accumFillPos) {
       accumCurrentPos = 0;
       accumFillPos--;
@@ -380,7 +419,7 @@ void accumLight() {
     }
   }
 }
-
+/*
 void runningLight() {
   // a colored dot sweeping
   // back and forth, with
@@ -398,7 +437,7 @@ void runningLight() {
     fill_solid( leds + prevpos, (pos - prevpos) + 1, CHSV( gHue, modifiedSaturation, 255));
   }
   prevpos = pos;
-}
+}*/
 
 /*
   void move()
@@ -548,49 +587,18 @@ void handleNoise() {
 
 
 
-void heartBeat(int bloodHue) {
-  fadeToBlackBy( leds, NUM_LEDS, 4 * modifiedScale);
-
-  int ownBPM = BeatsPerMinute;
-  if (NUM_LEDS <= 48) ownBPM = BeatsPerMinute * 2; //BPM is manipulated because if a second front is emitted, it needs to be half of the original
-  int pos1 = beat8(ownBPM / 2, 0) * NUM_LEDS / 256;
-  int pos2 = beat8(ownBPM / 2, 0 + 300) * NUM_LEDS / 256;
-  int pos3 = beat8(ownBPM / 2, 0 + 60000 / ownBPM) * NUM_LEDS / 256; //delay of the second "front" is 1000*(BPM/60)
-  int pos4 = beat8(ownBPM / 2, 0 + 60000 / ownBPM + 300) * NUM_LEDS / 256;
-
-  if (flowDirection < 0) {
-    pos1 = NUM_LEDS - pos1 - 1;
-    pos2 = NUM_LEDS - pos2 - 1;
-    pos3 = NUM_LEDS - pos3 - 1;
-    pos4 = NUM_LEDS - pos4 - 1;
-  }
-
-  leds[pos1] = CHSV( bloodHue, modifiedSaturation, 255 );
-  leds[pos2] = CHSV( bloodHue , modifiedSaturation, 255 );
-  if (NUM_LEDS > 48) { //if the LED strip is long enough, a second "front" of pulses is visible
-    leds[pos3] = CHSV( bloodHue, modifiedSaturation, 255 );
-    leds[pos4] = CHSV( bloodHue, modifiedSaturation, 255 );
-  }
-}
-
 void randomWander() {
   CRGB colorA;
   CRGB colorB;
   CRGB colorC;
 
-  EVERY_N_MILLISECONDS(10000) {//Change color in every 10 seconds
-    // Set pixel color
-    colorA = CHSV( random8(), modifiedSaturation, 255);
-    colorB = CHSV( random8(), modifiedSaturation * 0.8, 200);
-    colorC = CHSV( random8(), modifiedSaturation * 0.6, 200);
-  }
+    fadeToBlackBy( leds, NUM_LEDS, modifiedBlendSpeed);
+        leds[positionA] = ColorFromPalette( currentPalette, 51);
+    leds[positionB] = ColorFromPalette( currentPalette, 119);
+    leds[positionC] = ColorFromPalette( currentPalette, 186);
+  EVERY_N_MILLISECONDS(100) {  //####hogy kell változtatni??? Változóval nem megy...
 
-  fadeToBlackBy( leds, NUM_LEDS, modifiedBlendSpeed);
-  EVERY_N_MILLISECONDS(80) {  //####hogy kell változtatni??? Változóval nem megy...
 
-    leds[positionA] = colorA;
-    leds[positionB] = colorB;
-    leds[positionC] = colorC;
     // Set new position, moving (forward or backward) by delta.
     // NUM_LEDS is added to the position before doing the modulo
     // to cover cases where delta is a negative value.
@@ -611,7 +619,7 @@ void mirroredFire(bool stop)
   SPARKING = modifiedScale;
 
   // Array of temperature readings at each simulation cell
-  static byte heat[NUM_LEDS];
+  //static byte heat[NUM_LEDS];
 
   // Step 1.  Cool down every cell a little
   for ( int i = 0; i < NUM_LEDS; i++) {
@@ -724,7 +732,7 @@ void dualColor(short drawMode) {
   int shiftedPosition; //shift position with the time according to the speed param
 
 
-  globalPosShift += globalSpeed / 100.0; //use global position shift variable
+  globalPosShift += modifiedSpeed / 100.0; //use global position shift variable
 
   for ( int i = 0; i < NUM_LEDS; i++) {
     switch (drawMode) {
