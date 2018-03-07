@@ -369,7 +369,7 @@ void setLightningPalette()
 //Traffic light color palette definition
 
 CRGB trafficRed = CHSV( 0, 255, 255);
-CRGB trafficAmber = CHSV( 15, 255, 255);
+CRGB trafficAmber = CHSV( 20, 255, 255);
 CRGB trafficGreen = CHSV( 110, 255, 255);
 CRGB Black  = CRGB::Black;
 
@@ -537,13 +537,12 @@ void setup()
 
   myAlarmLight = new steadyLight();
   myAlarmLight->setElements(0, NUM_LEDS - 1, 0, sinusoid); //define all the LEDs for ALARM with RED color as a basis
-
   myRedLight = new steadyLight();
-  myRedLight->setElements(0, round((NUM_LEDS / 3) - 1), 0, sinusoid); //watch out for LED color index from the trafficLightPalette (red is on position 0)
+  myRedLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 0, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
   myAmberLight = new steadyLight();
   myAmberLight->setElements(round(NUM_LEDS / 3), round((NUM_LEDS * 2 / 3) - 1), 16, sinusoid); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
   myGreenLight = new steadyLight();
-  myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
+  myGreenLight->setElements(0, round((NUM_LEDS / 3) - 1), 32, sinusoid); //watch out for LED color index from the trafficLightPalette (red is on position 0)
 
   // FastLED provides these pre-conigured incandescent color profiles:
   //     Candle, Tungsten40W, Tungsten100W, Halogen, CarbonArc,
