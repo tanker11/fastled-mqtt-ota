@@ -106,6 +106,18 @@ void setLEDMode() {
     default:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; bSpeedMod = 1; satMod = 1; speedMod = 1; break; //=OFF
 
   }
+
+
+//****MULTI
+currentPalette = RainbowColors_p; gHueRoll = false; speedMod = 1; bSpeedMod = 1; satMod = 1; myAlarmLight->setColor(almMode);
+      if (myAlarmLight->blinkStatus) myAlarmLight->On();
+      if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
+      EVERY_N_MILLISECONDS( 1000 ) {
+        myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
+      };
+      //****MULTI VÉGE
+
+  
   modifiedSpeed = globalSpeed * speedMod; //modifying the speed according to the pattern we want
   modifiedScale = scale * scaleMod; //modifying the speed according to the pattern we want
   modifiedSaturation = globalSaturation * satMod; //modifying the saturation according to the pattern we want
@@ -367,8 +379,12 @@ void sinelon()
   //blendspeed=> color changing speed
   //scale=> length of trail
   //speed=> speed of dot(s)
-  fadeToBlackBy( leds, NUM_LEDS, modifiedScale);
-  int pos = beatsin16(round(modifiedSpeed / 2), 0, NUM_LEDS );
+  //fadeToBlackBy( leds, NUM_LEDS, modifiedScale);
+  //****MULTI****
+  for ( int i = NUM_LEDS/3; i < NUM_LEDS*2/3; i++) {
+    leds[i].fadeToBlackBy(modifiedScale);
+  }
+  int pos = beatsin16(round(modifiedSpeed / 2), 0, NUM_LEDS/3 )+NUM_LEDS/3; //****MULTI****
   static int prevpos = 0;
   if ( pos < prevpos ) {
     fill_solid( leds + pos, (prevpos - pos) + 1, CHSV(gHue, modifiedSaturation, 255));

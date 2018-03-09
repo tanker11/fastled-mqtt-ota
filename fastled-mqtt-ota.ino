@@ -41,16 +41,15 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 8;
-const bool    kMatrixSerpentineLayout = false;
-const bool sinusoid = false;
-
-
+const uint8_t kMatrixWidth  = 3; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 44;
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      2000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+const bool    kMatrixSerpentineLayout = false;
+const bool sinusoid = true;
+
+#define MILLI_AMPERE      5000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
@@ -60,7 +59,7 @@ const int FW_VERSION = 1002;
 char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
-#define ALIAS "bathlamp"
+#define ALIAS "bathmirror"
 #define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
 #define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
 #define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
@@ -493,9 +492,9 @@ void setup()
 {
   all_off_immediate(); //Clear the LED array
   delay(500); //safety delay
-  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, 0,NUM_LEDS/3).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS/3, NUM_LEDS/3).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, 2*NUM_LEDS/3,NUM_LEDS/3).setCorrection( TypicalLEDStrip );
 
   FastLED.setBrightness(MAX_BRIGHTNESS);
   //set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //depreciated
@@ -534,7 +533,7 @@ void setup()
   Serial.println();
 
   myAlarmLight = new steadyLight();
-  myAlarmLight->setElements(0, NUM_LEDS - 1, 0, sinusoid); //define all the LEDs for ALARM with RED color as a basis
+  myAlarmLight->setElements(2*NUM_LEDS/3, NUM_LEDS - 1, 0, sinusoid); //define all the LEDs for ALARM with RED color as a basis
   myRedLight = new steadyLight();
   myRedLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 0, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
   myAmberLight = new steadyLight();
