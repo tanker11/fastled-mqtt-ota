@@ -8,7 +8,7 @@
   Ha ezen jön egy üzenet, hogy új FW elérhető, akkor ellenőrzi az elérési helyet, és ha minden OK, akkor letölti. Pl. ellenőrzi, hogy az üzenetben
   hirdetett FW verzió nagyobb-e a mostaninál, ás egyezik-e az elérhetővel. Ha minden OK, frissít. Ha nem, akkor visszaválaszol a serialon és MQTT-n
 
-
+  Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
 
 */
 
@@ -24,16 +24,12 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #include <PubSubClient.h>
 #include <Ticker.h>
 
-
-
-
-//Vigyázat, ESP-01 esetén a LED villogtatás miatt nincs többé serial interfész, de OTA-val mehet a frissítés
-
 //FONTOS!!! A következő soroknak a "#include <FastLED.h>" elé kell kerülniük, különben nem érvényesülne
 #define FASTLED_INTERRUPT_RETRY_COUNT 0 //to avoid flickering
 #include <FastLED.h>
 // Another line is needed at setup to avoid Wifi sleep in the setup section: WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
+#define PWM_PIN      5 //!!! ez azért, mert nemFastLED pin!!!
 
 #define LED_PIN1     5
 #define LED_PIN2     6
@@ -42,31 +38,29 @@ MD_KeySwitch S(SWITCH_PIN, SWITCH_ACTIVE);
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB //NEOPIXEL MATRIX and LED STRIPE
 //#define COLOR_ORDER RGB //LED FÜZÉR (CHAIN)
-int MAX_BRIGHTNESS =  20;
-
-
+int MAX_BRIGHTNESS =  255;
 
 // If you don't use matrix, use =1 on one of the dimensions (for example: 60x1 led stripe)
-const uint8_t kMatrixWidth  = 1; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
-const uint8_t kMatrixHeight = 60;
+const uint8_t kMatrixWidth  = 8; //Number of LEDs cannot be less than 3!!! If 3, sinusoid must be FALSE!!!
+const uint8_t kMatrixHeight = 8;
 const bool    kMatrixSerpentineLayout = false;
-const bool sinusoid = true;
+const bool sinusoid = false;
 
 
 #define NUM_LEDS (kMatrixWidth * kMatrixHeight)
 #define MAX_DIMENSION ((kMatrixWidth>kMatrixHeight) ? kMatrixWidth : kMatrixHeight)
 
-#define MILLI_AMPERE      3840    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
+#define MILLI_AMPERE      2000    // IMPORTANT: set here the max milli-Amps of your power supply 5V 2A = 2000
 #define WIFI_LED_PIN 2 //2=NodeMCU vagy ESP-12, 1=ESP-01 beépített LED
 
 
 #define RETAINED true
 
-const int FW_VERSION = 1001;
-char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uploaded to this HTTP directory
+const int FW_VERSION = 1002;
+char* fwUrlBase = "http://192.168.0.7/ledfw/"; //FW files should be uploaded to this HTTP directory
 // note: alias.bin and alias.version files should be there. Update will be performed if the version file contains bigger number than the FW_VERSION variable
 
-#define ALIAS "alma"
+#define ALIAS "bathlamp"
 #define TOPIC_DEV_STATUS "/device/" ALIAS "/status"
 #define TOPIC_DEV_COMMAND "/device/" ALIAS "/command"
 #define TOPIC_DEV_SETURL "/device/" ALIAS "/seturl"
@@ -74,18 +68,24 @@ char* fwUrlBase = "http://192.168.1.196/fwtest/fota/"; //FW files should be uplo
 #define TOPIC_DEV_FASTLED "/device/" ALIAS "/fastled"
 #define TOPIC_DEV_ALARM "/device/" ALIAS "/alarm"
 #define TOPIC_DEV_FOTA "/device/" ALIAS "/fota"
-#define TOPIC_DEV_RGB "/device/" ALIAS "/rgb"
+
+#define TOPIC_BGRP_FASTLED "/bath/fastled" //used for bathroom group
 
 #define TOPIC_ALL_SETURL "/all/seturl"
 #define TOPIC_ALL_ALARM "/all/alarm"
 #define TOPIC_ALL_FOTA "/all/fota"
-#define TOPIC_ALL_RGB "/all/rgb"
 
-const char* ssid = "testm";
-const char* password = "12345678";
+
+//WiFi variables
+const char* ssid = "csirkelab";
+const char* password = "robirobi";
 const char* alias = ALIAS;
+const unsigned long connectRepeatTimer = 5000; //needs to be at least about 5s, otherwise the reconnection is not guaranteed
 
-
+//MQTT variables
+// Replace with the IP address of your MQTT server
+IPAddress mqttServerIP(192, 168, 0, 1);
+//IPAddress mqttServerIP(192, 168, 1, 1);
 String topicTemp; //topic string used ofr various publishes
 String publishTemp;
 char msg[50];
@@ -95,63 +95,74 @@ char recTopic[50];
 char recCommand[10];
 char recValue[10];
 
-
 boolean msgReceived; //shows if message received
 char digitTemp[3];
 unsigned long wifiCheckTimer;
 
-
-// Replace with the IP address of your MQTT server
-IPAddress mqttServerIP(192, 168, 1, 1);
-
+//General variables
 Ticker flipper; //for blinking built-in LED to show wifi and MQTT status
-
-
-
-
 WiFiClient wclient;
 PubSubClient client(wclient);
 
-/*
+// FASTLED VARIABLES
 
-   _____ _    ____ _____ _     _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
-  |  ___/ \  / ___|_   _| |   | ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
-  | |_ / _ \ \___ \ | | | |   |  _| | | | | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
-  |  _/ ___ \ ___) || | | |___| |___| |_| | |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-  |_|/_/   \_\____/ |_| |_____|_____|____/  |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
+enum {/*0..9 */  OFF, CSTEADY, RAINBOW, RAINBOW_G, GLITTERONLY, BPM_PULSE, CONFETTI, SINELON, JUGGLE, ACCUMLIGHT,
+                  /*10..19 */ INVERSEGLITTER, PINK, WAVESQ, WAVE, RND_WANDER, FIRE, FIRESTOP, NOISE_FIRE, NOISE_RND1BK, NOISE_RND4FULL, 
+                  /*20..29 */ AQUAGREEN_NOISE, NOISE_OCEAN, NOISE_LIGHTNING, TRAFFICLIGHT, AMBERBLINK, _DIVIDER_, ALARM, STEADY, TEST, WHITE_TEST, EMERGENCY, _LAST_
+     }; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
 
-*/
-
-// VARIABLES
-
-enum {OFF, RAINBOW, BPM, MOVE, ALARM, STEADY, TRAFFICLIGHT, AMBERBLINK, NOISE, NOISE1, TEST, _LAST_}; //stores the FastLED modes _LAST_ is used for identify the max number for the sequence
+enum {SQUARE, SINUS, CUBIC}; //definitions for dual color patterns
 int LEDMode = OFF;
 int prevLEDMode = OFF;
+int oldLEDMode = OFF;
 int almMode = 0; //global variable for the ALARM color index
-
+bool reverseColor = false; //in some cases the colours are reversed if this is true
 
 float gHue = 0; // rotating "base color" used by many of the patterns - should be float to be able to handle small amount of changes
 int FRAMES_PER_SECOND = 50; // here you can control the refresh speed - note this will influence the globalSpeed itself
 int globalSpeed = 50; //defines generic animation speed default
+int oldGlobalSpeed = 50;
+float globalPosShift = 0;
+float speedMod = 1; //modifies the speed factor according to the LEDMode
+float scaleMod = 1; //modifies the scale factor according to the LEDMode
+float satMod = 1; //modifies the saturation factor according to the LEDMode
+float bSpeedMod = 1; //modifies blending speed factor according to the
+float modifiedSpeed, modifiedScale, modifiedSaturation, modifiedBlendSpeed; //modified values after the global and modifier factor multiplications
 int globalSaturation = 255;
+int oldGlobalSaturation = 255;
 uint8_t blendSpeed = 10; //defines palette cross-blend speed
+uint8_t oldBlendSpeed = 10; //defines palette cross-blend speed
+int blendIndex; //index of position between the color1 and color2 where we are doing a blended smooth conversion (CSTEADY mode)
+bool newColor = false;
 
 // Scale determines how far apart the pixels in our noise matrix are.  Try
 // changing these values around to see how it affects the motion of the display.  The
 // higher the value of scale, the more "zoomed out" the noise will be.  A value
 // of 1 will be so zoomed in, you'll mostly see solid colors.
 // Megjegyzés: ezt használjuk már animációkban is (nem csak 1-10-ig), ott átszámoljuk a megfelelő skálára
-int scale = 20; // scale is set dynamically once we've started up
-int new_scale = 20;
+int scale = 10; // scale is set dynamically once we've started up
+int oldScale = 10;
+
+
 // The 16 bit version of our coordinates
 static uint16_t x;
 static uint16_t y;
 static uint16_t z;
 
+bool globalSpeedChanged = false;
+bool LEDModeChanged = false;
+bool scaleChanged = false;
+bool blendSpeedChanged = false;
+bool BeatsPerMinuteChanged = false;
+bool globalSaturationChanged = false;
+
 CRGB leds[kMatrixWidth * kMatrixHeight];     //allocate the vector for the LEDs, considering the matrix dimensions
 CRGBPalette16 currentPalette( CRGB::Black ); //black palette
 CRGBPalette16 targetPalette( CRGB::Black );  //black palette
 TBlendType    currentBlending;
+
+static byte heat[NUM_LEDS]; //contains "heat" indication, that is the level of change on the pallette. heat=0 means background color, heat=255 means the 'other end' of the colour pallette
+short blendPosA, blendPosB; //positions of the two colors on the pallette, when we use fadingToBackground
 
 // This is the array that we keep our computed noise values in
 uint8_t noise[MAX_DIMENSION][MAX_DIMENSION];
@@ -159,18 +170,57 @@ uint8_t noise[MAX_DIMENSION][MAX_DIMENSION];
 bool errorStatus = false;  //indicates if there is a need for error indication (by a blinink first LED in RED)
 bool errorBlinkStatus = false;  //indicates the status of the first blinking LED
 bool gHueRoll = false; //indicates if gHue roll is activated
+uint8_t BeatsPerMinute = 80;
+uint8_t oldBeatsPerMinute = 80;
 
+//Variables for TEST mode
 int testFrom = 0, testTo = 0, testHue = 0; //variables for test mode
 
+//Variables for Traffic Light mode
 short tlStatusVar = 0; //Traffic light status variable 0:Red, 1:Red-Amber, 2: Green, 3: Amber
 unsigned long tlTimingLamp; //Traffic light timing before the next stage
 unsigned long tlMillis; //Timing millis for Traffic Light
 
-// PALETTES
+//Variable for emergency mode
+short emergencyState = 0; //0: off, 1: 25 %, 2: 50 %, 3: 75 %, 4: 100 % white all LEDs
 
+
+
+//Variables for FIRE
+bool gReverseDirection = false;
+int randomFireNumber;
+// COOLING: How much does the air cool as it rises?
+// Less cooling = taller flames.  More cooling = shorter flames.
+// Default 50, suggested range 20-100
+int COOLING = 90;
+// SPARKING: What chance (out of 255) is there that a new spark will be lit?
+// Higher chance = more roaring fire.  Lower chance = more flickery fire.
+// Default 120, suggested range 50-200.
+int SPARKING = 50;
+
+//Variables for 3 LEDs wandering randomly
+int16_t positionA = NUM_LEDS * 2 / 6; // Set initial start position of A pixel
+int16_t positionB = NUM_LEDS * 3 / 6; // Set initial start position of B pixel
+int16_t positionC = NUM_LEDS * 4 / 6; // Set initial start position of C pixel
+int8_t deltaA = 1;           // Using a negative value will move pixels backwards.
+int8_t deltaB = 1;           // Using a negative value will move pixels backwards.
+int8_t deltaC = 1;           // Using a negative value will move pixels backwards.
+//#define holdTime 100   // Milliseconds to hold position before advancing
+
+//Variables for accumLight
+int accumCurrentPos; //shows the position of the current moving LED
+int accumFillPos; //shows the current position of the filled status
+
+//Variables for InverseGlitter
+int invPos=0;
+
+//Variables for lightning
+unsigned long lightningTime;
+
+// FASTLED PALETTES
 // This function sets up a palette of purple and green stripes.
-void SetFavoritePalette1()
-{
+/*void SetFavoritePalette1()
+  {
   CRGB orange = CHSV( 20, 255, 255);
   CRGB cyan  = CHSV( 110, 255, 255);
   CRGB black  = CRGB::Black;
@@ -180,12 +230,144 @@ void SetFavoritePalette1()
                     orange, orange,  orange, orange,
                     cyan,  cyan,  cyan,  cyan,
                     orange, orange,  orange, orange );
+  }*/
+
+void setDualPalette(CRGB color1, CRGB color2)
+{
+  targetPalette = CRGBPalette16(
+                    color1, color2);
+
+}
+
+void setBlackAndWhiteStripedPalette()
+{
+  // 'black out' all 16 palette entries...
+  fill_solid( targetPalette, 16, CRGB::Black);
+  // and set every eighth one to white.
+  currentPalette[0] = CRGB::White;
+  // currentPalette[4] = CRGB::White;
+  currentPalette[8] = CRGB::White;
+  //  currentPalette[12] = CRGB::White;
+}
+
+void randomFirePalette (unsigned long timing) { //selects from gradient palettes with dark and bright end for fire simulations
+
+  EVERY_N_MILLISECONDS( timing ) { //new random palette every n seconds. In order to avoid wait time, we apply the palette immediately on mode change
+    randomFireNumber = random8(8);
+          EVERY_N_MILLISECONDS( timing * 5 ) {//we do this rarely as flipping the value causes sudden color flip
+    if (random8(100) > 50) reverseColor = !reverseColor; //with 50 per cent probability reverse the colors (used on fixed palette colors in REVERSEXMAS for example)
+    
+    //Serial.println(reverse);
+  }
+
+  }
+  //randomFireNumber = 7;
+  switch (randomFireNumber) {
+    case 0: targetPalette = HeatColors_p; break; //traditional fire colors
+    case 1: targetPalette = CRGBPalette16( CRGB::Black, CHSV(0, 180, 255), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink fire
+    case 2: targetPalette = CRGBPalette16( CRGB::Black, CHSV(25, 255, 255), CHSV(28, 200, 255) , CHSV(32, 150, 255)); break; //orange fire
+    case 3: targetPalette = CRGBPalette16( CRGB::Black, CHSV(200, 255, 180), CHSV(28, 255, 255) , CHSV(32, 200, 255)); break; //orange-purple fire
+    case 4: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(28, 255, 255) , CHSV(32, 200, 255)); break; //orange-aqua fire
+    case 5: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 255, 255) , CHSV(0, 210, 255)); break; //red-aqua fire
+    case 6: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink-aqua fire
+    case 7: targetPalette = CRGBPalette16( CRGB::Black, CRGB::MidnightBlue, CRGB::Aquamarine , CRGB::Aqua); break; //midnightblue-aqua fire
+    case 8: targetPalette = CRGBPalette16( CRGB::Black, CHSV(100, 255, 180), CHSV(15, 255, 255) , CHSV(15, 160, 255)); break; //green-peach blossom fire
+    default: targetPalette = HeatColors_p; break; //traditional fire colors
+  }
+}
+
+void RandomPalette(short numColors, unsigned long timing) {
+  if (LEDModeChanged) {
+    Serial.println("Applying palette immediately");
+    setRandomPalette(numColors);
+
+  }
+  EVERY_N_MILLISECONDS( timing ) { //new random palette every 10 seconds. In order to avoid wait time, we apply the palette immediately on mode change
+    setRandomPalette(numColors);
+  }
+
+}
+
+void setRandomPalette(short numColors)
+{
+
+
+  // For FOUR COLORS This function generates a random palette that's a gradient
+  // between four different colors.  The first is a dim hue, the second is
+  // a bright hue, the third is a bright pastel, and the last is
+  // another bright hue.  This gives some visual bright/dark variation
+  // which is more interesting than just a gradient of different hues.
+
+  CRGB black  = CRGB::Black;
+  CRGB random1, random2, random3;
+  switch (numColors) {
+    case 2:
+      random1 = CHSV( random8(), 255, 255);
+      random2 = CHSV( random8(), 255, 255);
+      random3 = black;
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
+      break;
+
+    case 3:
+      random1 = CHSV( random8(), 255, 255);
+      random2 = CHSV( random8(), 200, 100);
+      random3 = CHSV( random8(), 150, 200);
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
+      break;
+
+    case 4:
+      // This function generates a random palette that's a gradient
+      // between four different colors.  The first is a dim hue, the second is
+      // a bright hue, the third is a bright pastel, and the last is
+      // another bright hue.  This gives some visual bright/dark variation
+      // which is more interesting than just a gradient of different hues.
+
+      targetPalette = CRGBPalette16(
+                        CHSV( random8(), 255, 32),
+                        CHSV( random8(), 255, 255),
+                        CHSV( random8(), 128, 255),
+                        CHSV( random8(), 255, 255));
+
+      break;
+    default: //also for case 1:
+
+      random1 = CHSV( random8(), 255, 255);
+      random2 = black;
+      random3 = black;
+      targetPalette = CRGBPalette16(
+                        random1, random1, black, black,
+                        random2, random2, black, random3,
+                        random1, random1, black, black,
+                        random2, random2, black, random3);
+
+      break;
+  }
+
+}
+
+void setLightningPalette()
+{
+  // 'black out' all 16 palette entries...
+  fill_solid( targetPalette, 16, CRGB::Black);
+  // and set every eighth one to white.
+  currentPalette[0] = CRGB::White;
+  // currentPalette[4] = CRGB::White;
+  currentPalette[8] = CRGB::Aqua;
+  // currentPalette[12] = CRGB::White;
 }
 
 //Traffic light color palette definition
 
 CRGB trafficRed = CHSV( 0, 255, 255);
-CRGB trafficAmber = CHSV( 15, 255, 255);
+CRGB trafficAmber = CHSV( 20, 255, 255);
 CRGB trafficGreen = CHSV( 110, 255, 255);
 CRGB Black  = CRGB::Black;
 
@@ -195,59 +377,15 @@ CRGB Black  = CRGB::Black;
 //32-47 GREEN
 //48-255 BLACK
 
+
 CRGBPalette16 trafficLightPalette = CRGBPalette16(
                                       trafficRed,  trafficAmber,  trafficGreen,  Black,
                                       Black, Black, Black,  Black,
                                       Black,  Black,  Black,  Black,
                                       Black, Black, Black,  Black );
 
-
-void pastelizeColors() {
-  //handles the saturation
-  //adds proportion of WHITE tint depending on the globalSaturation number
-  //makes similar behavior to HSV saturation variable, but in case of palette coloring, there is no such possibility
-  for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] += CRGB(255 - globalSaturation, 255 - globalSaturation, 255 - globalSaturation);
-
-
-
-  }
-}
-
-
-void gradientRedGreen() {
-  fill_gradient(leds, 0, CHSV(HUE_RED, 255, 255), NUM_LEDS - 1, CHSV(HUE_GREEN, 255, 255), SHORTEST_HUES);
-
-  FastLED.show();
-  //ugyanezt az is megcsinálja, hogy összesen két színt teszünk a palettára. És átfolyatja egymásba a színeket
-}
-
-void tripleBlink(CRGB color) {
-  for (int j = 0; j < 3; j++) {
-    fill_solid( leds, NUM_LEDS, color);
-    FastLED.show();
-    delay(100);
-    fill_solid( leds, NUM_LEDS, CRGB::Black);
-    FastLED.show();
-    delay(100);
-  }
-}
-
-void steady(int from, int to, CRGB color) {
-
-  int fromLED = (from < 0) ? 0 : from;
-  int toLED = (to > NUM_LEDS) ? NUM_LEDS : to;
-
-  for (int i = fromLED; i < toLED + 1; i++) {
-    leds[i] = color;
-  }
-}
-
 /****************************************************************************
-   steadyLight CLASS
-
-
-
+   steadyLight CLASS for blinking alarm and trafficlights
  ****************************************************************************/
 #define lightMaxNumLEDs NUM_LEDS
 #define dimSpeedUp 40
@@ -261,28 +399,22 @@ class steadyLight
     boolean blinkStatus = true;
     int fromLED, toLED; //stores the start and end point of the range of LEDs this instance handles
     short LEDColorIndex;
+    bool alarmWhite;
     short elementDim = 0; //dim values for the element
     bool sinusoidal;
-
 
     void setElements (int from, int to, int colorIndex, bool sinus) { //set basic parameters
       LEDColorIndex = colorIndex;
       fromLED = from;
       toLED = to;
       sinusoidal = sinus;
-
     }
 
     void setColor (int colorIndex) { //set color only
       LEDColorIndex = colorIndex;
+      if (colorIndex == -1) alarmWhite = true; else alarmWhite = false;  //if alarm mode is -1, it means more than one alarm are in active status. This case we will show white blinking light
     }
 
-    int saturateValue(int value) {
-      int saturated = value;
-      if (value < minDim) saturated = 0;
-      if (value > maxDim) saturated = maxDim;
-      return saturated;
-    }
 
     void On() {
       if (elementDim + dimSpeedUp >= maxDim) {
@@ -307,7 +439,7 @@ class steadyLight
       /*
          How this works: there is a "profile" of brightness, a curve. The curve is virtually moved upwards and downwards with an offset.
          The result brightness is saturated at maxDim level.
-         The remanence brightness (very small values) are dropped to zero if they are below minDim level) see saturateValue() function above
+         The remanence brightness (very small values) are dropped to zero if they are below minDim level
       */
       for (int currentLED = fromLED; currentLED < toLED + 1; currentLED++) {
         int posBrightness, scaled;
@@ -315,707 +447,32 @@ class steadyLight
         if (sinusoidal) { //in case you need the edges to be shaded with a sinusoidal curve
           scaled = (currentLED - fromLED) * 128 / (toLED - fromLED); //scales to the sine waveform to the range of LEDs
           posBrightness = sin8(scaled);
-
-
           //scaled = (currentLED - fromLED) * 256 / (toLED - fromLED); //scales to the cubic waveform to the range of LEDs
           //posBrightness = cubicwave8(scaled);
 
         } else posBrightness = 128; //otherwise it makes is even brightness for all LEDs
 
-        leds[currentLED] = ColorFromPalette( trafficLightPalette, LEDColorIndex , saturateValue(posBrightness + elementDim), LINEARBLEND);
+        if (alarmWhite) { // "-1" case, when more than alamr situation is active. Then we need to show white color
+          leds[currentLED] = ColorFromPalette( HeatColors_p, 255 , constrain(posBrightness + elementDim, 0, 255), NOBLEND);   //pick a pre-defined white color
+        }
+        else
+
+          leds[currentLED] = ColorFromPalette( currentPalette, LEDColorIndex , constrain(posBrightness + elementDim, 0, 255), LINEARBLEND);
+
       }
     }
 };
 
 
+//####FastLED functions
 
-//**********************************-Trafficlight cass vége
+//####FOTA functions
 
-void FillLEDsFromPaletteColors( ) {
-  uint8_t brightness = 255;
-  int paletteStep = (int)256 / NUM_LEDS;
-  //currentBlending = NOBLEND;
-  currentBlending = LINEARBLEND;
-  for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, currentBlending);
+//####MQTT functions
 
+//####Message process functions
 
-  }
-}
-
-void all_off() {
-  fadeToBlackBy( leds, NUM_LEDS, blendSpeed);
-}
-
-void all_off_immediate() {
-  fill_solid( leds, NUM_LEDS, CRGB::Black);
-}
-
-
-void rainbow()
-{
-  // FastLED's built-in rainbow generator
-  //fill_rainbow( leds, NUM_LEDS, gHue, 7);
-  FillLEDsFromPaletteColors();
-}
-
-void bpm()
-{
-  // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
-  uint8_t BeatsPerMinute = 62;
-
-  uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
-  for ( int i = 0; i < NUM_LEDS; i++) { //9948
-    leds[i] = ColorFromPalette(currentPalette, gHue + (i * 2), beat - gHue + (i * 10));
-  }
-}
-
-void move()
-{
-  uint8_t brightness = 255;
-  int paletteStep = (int)256 / NUM_LEDS;
-  currentBlending = NOBLEND;
-  for ( int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = ColorFromPalette( currentPalette, i * paletteStep + gHue , brightness, currentBlending);
-
-
-  }
-}
-
-//NOISE FUNCTIONS-------------------------------------------------
-//
-// Mark's xy coordinate mapping code.  See the XYMatrix for more information on it.
-//
-uint16_t XY( uint8_t x, uint8_t y)
-{
-  uint16_t i;
-  if ( kMatrixSerpentineLayout == false) {
-    i = (y * kMatrixWidth) + x;
-  }
-  if ( kMatrixSerpentineLayout == true) {
-    if ( y & 0x01) {
-      // Odd rows run backwards
-      uint8_t reverseX = (kMatrixWidth - 1) - x;
-      i = (y * kMatrixWidth) + reverseX;
-    } else {
-      // Even rows run forwards
-      i = (y * kMatrixWidth) + x;
-    }
-  }
-  return i;
-}
-// Fill the x/y array of 8-bit noise values using the inoise8 function.
-void fillnoise8() {
-  // If we're runing at a low "speed", some 8-bit artifacts become visible
-  // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
-  // The amount of data smoothing we're doing depends on "speed".
-  uint8_t dataSmoothing = 0;
-  if ( globalSpeed < 50) {
-    dataSmoothing = 200 - (globalSpeed); //globalSpeed*4 volt itt
-  }
-
-  for (int i = 0; i < MAX_DIMENSION; i++) {
-    int ioffset = scale * i;
-    for (int j = 0; j < MAX_DIMENSION; j++) {
-      int joffset = scale * j;
-
-      uint8_t data = inoise8(x + ioffset, y + joffset, z);
-
-      // The range of the inoise8 function is roughly 16-238.
-      // These two operations expand those values out to roughly 0..255
-      // You can comment them out if you want the raw noise data.
-      data = qsub8(data, 16);
-      data = qadd8(data, scale8(data, 39));
-
-      if ( dataSmoothing ) {
-        uint8_t olddata = noise[i][j];
-        uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
-        data = newdata;
-      }
-
-      noise[i][j] = data;
-    }
-  }
-
-  //z += globalSpeed;
-  z += globalSpeed / 8;
-
-  // apply slow drift to X and Y, just for visual variation.
-  //x += globalSpeed / 8;
-  x += globalSpeed / 64;
-  //y -= globalSpeed / 16;
-  y -= globalSpeed / 128;
-}
-
-void mapNoiseToLEDsUsingPalette()
-{
-  static uint8_t ihue = 0;
-
-  for (int i = 0; i < kMatrixWidth; i++) {
-    for (int j = 0; j < kMatrixHeight; j++) {
-      // We use the value at the (i,j) coordinate in the noise
-      // array for our brightness, and the flipped value from (j,i)
-      // for our pixel's index into the color palette.
-
-      uint8_t index = noise[j][i];
-      uint8_t bri =   noise[i][j];
-
-      // if this palette is a 'loop', add a slowly-changing base value
-      if ( gHueRoll) {
-        index += ihue;
-      }
-
-      // brighten up, as the color palette itself often contains the
-      // light/dark dynamic range desired
-      if ( bri > 127 ) {
-        bri = 255;
-      } else {
-        bri = dim8_raw( bri * 2);
-      }
-
-      CRGB color = ColorFromPalette( currentPalette, index, bri);
-      leds[XY(i, j)] = color;
-    }
-  }
-
-  ihue += 1;
-}
-
-
-void handleNoise() {
-
-  // generate noise data
-  fillnoise8();
-
-  // convert the noise data to colors in the LED array
-  // using the current palette
-  mapNoiseToLEDsUsingPalette();
-
-}
-
-//NOISE FUNCTIONS END------------------------------------------
-
-/**************FastLED FUNCTIONS END******************************/
-
-/*
-  _____ ___ _____  _      _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
-  |  ___/ _ \_   _|/ \    |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
-  | |_ | | | || | / _ \   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
-  |  _|| |_| || |/ ___ \  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-  |_|   \___/ |_/_/   \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
-
-*/
-
-
-void checkForUpdates() {
-
-  String fwURL = String( fwUrlBase );
-  fwURL.concat( alias );
-  String fwVersionURL = fwURL;
-  fwVersionURL.concat( ".version" );
-
-  Serial.println( "Checking for firmware updates." );
-  Serial.print( "Alias: " );
-  Serial.println( alias );
-  Serial.print( "Firmware version URL: " );
-  Serial.println( fwVersionURL );
-  //Blink three times with BLUE color to show the checking phase
-  tripleBlink(CRGB::Blue);
-
-  HTTPClient httpClient;
-  httpClient.begin( fwVersionURL );
-  int httpCode = httpClient.GET();
-  if ( httpCode == 200 ) {
-    String newFWVersion = httpClient.getString();
-
-    Serial.print( "Current firmware version: " );
-    Serial.println( FW_VERSION );
-    Serial.print( "Available firmware version: " );
-    Serial.println( newFWVersion );
-
-    int newVersion = newFWVersion.toInt();
-
-    if ( newVersion > FW_VERSION ) {
-      Serial.println( "Preparing to update" );
-      //Changing all LEDs to static pattern to make the update status visible
-      gradientRedGreen();
-
-
-      //Publish FW found status
-      client.publish(TOPIC_DEV_STATUS, "FW found, downloading");
-      gradientRedGreen();
-
-      String fwImageURL = fwURL;
-      fwImageURL.concat( ".bin" );
-      Serial.println( "Update started." );
-      ESPhttpUpdate.rebootOnUpdate(false); //do not allow reboot after update so that we can feed back to the user
-      t_httpUpdate_return ret = ESPhttpUpdate.update( fwImageURL );
-
-      switch (ret) {
-        case HTTP_UPDATE_FAILED:
-          Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
-          //Publish failed status
-          client.publish(TOPIC_DEV_STATUS, "HTTP update failed");
-          break;
-
-        case HTTP_UPDATE_NO_UPDATES:
-          Serial.println("HTTP_UPDATE_NO_UPDATES");
-          //Publish no HTTP update status
-          client.publish(TOPIC_DEV_STATUS, "No HTTP updates");
-          break;
-
-        case HTTP_UPDATE_OK:
-          Serial.println("HTTP_UPDATE_SUCCESSFUL");
-          client.publish(TOPIC_DEV_STATUS, "HTTP update successful");
-          tripleBlink(CRGB::Green);
-          delay(1000);
-          ESP.restart();
-          break;
-      }
-    }
-    else {
-      Serial.println( "Already on latest version" );
-      //Publish FW found status
-      client.publish(TOPIC_DEV_STATUS, "Already on latest version");
-    }
-  }
-  else {
-    Serial.print( "Firmware version check failed, got HTTP response code " );
-    Serial.println( httpCode );
-    //Publish failed status
-    client.publish(TOPIC_DEV_STATUS, "Could not check available FW");
-  }
-  httpClient.end();
-}
-
-
-/**************FOTA FUNCTIONS END******************************/
-
-/*
-   __  __  ___ _____ _____   _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
-  |  \/  |/ _ \_   _|_   _| |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
-  | |\/| | | | || |   | |   | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
-  | |  | | |_| || |   | |   |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-  |_|  |_|\__\_\|_|   |_|   |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
-
-*/
-//Subscribe function
-void subscribeToTopics() {
-
-  //Note: multible subscription will not work without client.loop();
-
-  client.subscribe(TOPIC_DEV_COMMAND);
-  Serial.println("Subscribed to [" TOPIC_DEV_COMMAND "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_TEST);
-  Serial.println("Subscribed to [" TOPIC_DEV_TEST "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_SETURL);
-  Serial.println("Subscribed to [" TOPIC_DEV_SETURL "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_FASTLED);
-  Serial.println("Subscribed to [" TOPIC_DEV_FASTLED "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_ALARM);
-  Serial.println("Subscribed to [" TOPIC_DEV_ALARM "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_FOTA);
-  Serial.println("Subscribed to [" TOPIC_DEV_FOTA "] topic");
-  client.loop();
-  client.subscribe(TOPIC_DEV_RGB);
-  Serial.println("Subscribed to [" TOPIC_DEV_RGB "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_ALARM);
-  Serial.println("Subscribed to [" TOPIC_ALL_ALARM "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_FOTA);
-  Serial.println("Subscribed to [" TOPIC_ALL_FOTA "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_RGB);
-  Serial.println("Subscribed to [" TOPIC_ALL_RGB "] topic");
-  client.loop();
-  client.subscribe(TOPIC_ALL_SETURL);
-  Serial.println("Subscribed to [" TOPIC_ALL_SETURL "] topic");
-}
-
-
-void publishMyIP() {
-  //Publishing own IP on device/[alias]/ip/ topic
-  IPAddress local = WiFi.localIP();
-  strcpy(msg, "");
-  sprintf(msg, "IP: %i.%i.%i.%i", local[0], local[1], local[2], local[3]);
-  client.publish(TOPIC_DEV_STATUS, msg, RETAINED);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-void publishMyFW() {
-
-  //Publishing own FW version on device/[alias]/fw/ topic
-  strcpy(msg, "");
-  sprintf(msg, "FW: %i", FW_VERSION);
-  client.publish(TOPIC_DEV_STATUS, msg, RETAINED);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-void publishMyHeap() {
-
-  //Publishing own FW version on device/[alias]/fw/ topic
-  strcpy(msg, "");
-  sprintf(msg, "HEAP: %i", ESP.getFreeHeap());
-  client.publish(TOPIC_DEV_STATUS, msg);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-void publishMySketchSize() {
-
-  //Publishing own FW version on device/[alias]/status/ topic
-  strcpy(msg, "");
-  sprintf(msg, "SKETCH: %i", ESP.getSketchSize());
-  client.publish(TOPIC_DEV_STATUS, msg);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-
-void publishMyLEDmode() {
-
-  //Publishing current and previous LEDModes on device/[alias]/status/ topic
-  strcpy(msg, "");
-  sprintf(msg, "Current LEDMode: %i previous LEDMode: %i", LEDMode, prevLEDMode);
-  client.publish(TOPIC_DEV_STATUS, msg);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-
-void publishMyURL() {
-
-  //Publishing actual FOTA URL on device/[alias]/status/ topic
-  strcpy(msg, "");
-  sprintf(msg, "FOTA URL: %s", fwUrlBase );
-  client.publish(TOPIC_DEV_STATUS, msg);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-void publishMyFreeSize() {
-
-  //Publishing own FW version on device/[alias]/fw/ topic
-  strcpy(msg, "");
-  sprintf(msg, "FREE: %i", ESP.getFreeSketchSpace());
-  client.publish(TOPIC_DEV_STATUS, msg);
-  Serial.printf("MQTT topic: %s, message: %s\n", TOPIC_DEV_STATUS, msg);
-
-}
-
-// Callback function
-void callback(char* topic, byte * payload, unsigned int length) {
-  digitalWrite(WIFI_LED_PIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
-
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  strcpy(recTopic, "");
-  strcpy(recTopic, topic); //storing received topic for further processing
-  Serial.print("] ");
-  int i;
-  for (i = 0; i < length; i++) {
-    // Serial.print((char)payload[i]);
-    recMsg[i] = (char)payload[i];
-  }
-  recMsg[i] = '\0'; //Closing the C string
-  Serial.println(recMsg);
-  msgReceived = true;
-
-  digitalWrite(WIFI_LED_PIN, HIGH);  // Turn the LED off by making the voltage HIGH
-}
-
-/**************MQTT FUNCTIONS END******************************/
-
-/*
-
-  __  __ _____ ____ ____    _    ____ _____   ____  ____   ___   ____ _____ ____ ____
-  |  \/  | ____/ ___/ ___|  / \  / ___| ____| |  _ \|  _ \ / _ \ / ___| ____/ ___/ ___|
-  | |\/| |  _| \___ \___ \ / _ \| |  _|  _|   | |_) | |_) | | | | |   |  _| \___ \___ \
-  | |  | | |___ ___) |__) / ___ \ |_| | |___  |  __/|  _ <| |_| | |___| |___ ___) |__) |
-  |_|  |_|_____|____/____/_/   \_\____|_____| |_|   |_| \_\\___/ \____|_____|____/____/
-
-*/
-
-
-void processRecMessage() {
-
-  bool validContent = false;
-
-  //FASTLED BRANCH
-  if (strcmp(recTopic, TOPIC_DEV_FASTLED) == 0) {
-    strcpy(recCommand, "");
-    strcpy(recValue, "");
-    Serial.println(TOPIC_DEV_FASTLED " branch");
-
-    //try to find segments separated by ":"
-    char *found = strtok(recMsg, ":");  //find the first part before the ":"
-    if (found != NULL) { //if found...
-      strcpy(recCommand, found);
-      found = strtok(NULL, ":"); //find the second part
-      if (found != NULL) {
-        validContent = true;
-        strcpy(recValue, found);
-      }
-    }
-    //If found, process it
-    if (strcmp(recCommand, "ledmode") == 0) {
-      if (LEDMode != ALARM) { //If LEDMode is not ALARM, change the mode
-        prevLEDMode = LEDMode;
-        LEDMode = atoi(recValue);
-        Serial.printf("ledmode:%d\n", LEDMode);
-      } else { //if in ALARM mode, change the prevLEDMode instead, then it will go back to the new prevMode after the ALARM status
-        prevLEDMode = atoi(recValue);
-        Serial.println("IN ALARM! Changing the prevledmode");
-        Serial.printf("prevledmode:%d\n", prevLEDMode);
-      }
-
-    }
-
-    if (strcmp(recCommand, "speed") == 0) {
-      globalSpeed = atoi(recValue);
-      Serial.printf("speed:%d\n", globalSpeed);
-
-    }
-
-    if (strcmp(recCommand, "brightness") == 0) {
-      MAX_BRIGHTNESS = atoi(recValue);
-      Serial.printf("brightness:%d\n", MAX_BRIGHTNESS);
-      FastLED.setBrightness(MAX_BRIGHTNESS);
-    }
-
-    if (strcmp(recCommand, "saturation") == 0) {
-      globalSaturation = atoi(recValue);
-      if (globalSaturation > 255) globalSaturation = 255;
-      if (globalSaturation < 0) globalSaturation = 0;
-      Serial.printf("saturation:%d\n", globalSaturation);
-
-    }
-
-
-
-  }//END OF FASTLED BRANCH
-
-
-  // COMMAND BRANCH
-  if (strcmp(recTopic, TOPIC_DEV_COMMAND) == 0) {
-    validContent = true;
-    Serial.println(TOPIC_DEV_COMMAND " branch");
-    if (strcmp(recMsg, "getfw") == 0) {
-      tripleBlink(CRGB::Blue);
-      validContent = true;
-      publishMyFW();
-    }
-    if (strcmp(recMsg, "getip") == 0) {
-      validContent = true;
-      publishMyIP();
-    }
-    if (strcmp(recMsg, "getsketchsize") == 0) {
-      validContent = true;
-      publishMySketchSize();
-    }
-    if (strcmp(recMsg, "getfreesize") == 0) {
-      validContent = true;
-      publishMyFreeSize();
-    }
-    if (strcmp(recMsg, "getfreeheap") == 0) {
-      validContent = true;
-      publishMyHeap();
-    }
-
-    if (strcmp(recMsg, "getledmode") == 0) {
-      validContent = true;
-      publishMyLEDmode();
-    }
-
-    if (strcmp(recMsg, "error") == 0) {
-      errorStatus = true;
-      validContent = true;
-    }
-    if (strcmp(recMsg, "noerror") == 0) {
-      errorStatus = false;
-      validContent = true;
-    }
-
-    if (strcmp(recMsg, "geturl") == 0) {
-      publishMyURL();
-      validContent = true;
-    }
-
-    if (strcmp(recMsg, "prevmode") == 0) {
-      validContent = true;
-      if (prevLEDMode != ALARM) {
-        int tempMode = LEDMode;
-        LEDMode = prevLEDMode;
-        prevLEDMode = tempMode; //exchange LEDMode and prevLEDModes
-        Serial.printf("ledmode:%d\n", LEDMode);
-      } else Serial.println("PREVIOUS MODE IS ALARM! NOT CHANGING");
-
-    }
-
-
-
-    if (strcmp(recMsg, "reboot") == 0) {
-      Serial.println("Rebooting...");
-      tripleBlink(CRGB::Blue);
-      delay(500);
-      ESP.restart();
-    }
-
-  }// END OF COMMAND BRANCH
-
-  //TEST BRANCH
-
-  if (strcmp(recTopic, TOPIC_DEV_TEST) == 0) {
-    Serial.println(TOPIC_DEV_TEST " branch");
-    if (strcmp(recMsg, "clear") == 0) {
-      validContent = true;
-      LEDMode = OFF;
-
-      Serial.println("test clear");
-    }
-    else
-    { //if the message is not "clear", check the content
-      strcpy(recValue, "");
-
-      //try to find segments separated by ":"
-      char *found = strtok(recMsg, ":");  //find the first part before the ":"
-      if (found != NULL) { //if found...
-        strcpy(recValue, found);
-        testFrom = atoi(recValue);
-
-        found = strtok(NULL, ":"); //find the second part
-        if (found != NULL) {
-          strcpy(recValue, "");
-
-          strcpy(recValue, found);
-          testTo = atoi(recValue);
-
-          found = strtok(NULL, ":"); //find the third part
-          if (found != NULL) {
-            strcpy(recValue, "");
-            validContent = true;
-            strcpy(recValue, found);
-            testHue = atoi(recValue);
-            Serial.printf("test from:%d to:%d hue:%d\n", testFrom, testTo, testHue);
-            LEDMode = TEST;
-          }
-        }
-      }
-    }
-  }//END OF TEST BRANCH
-
-  //FOTA BRANCH
-
-  if (strcmp(recTopic, TOPIC_DEV_FOTA) == 0 || strcmp(recTopic, TOPIC_ALL_FOTA) == 0) {
-
-    if (strcmp(recMsg, "checknew") == 0) { //command received for checking new FW
-      validContent = true;
-      checkForUpdates();
-    }
-
-  }//END OF FOTA BRANCH
-
-  //SETURL BRANCH !!! NOTE:this can be for all devices! NOTE: any string is accepted
-  if (strcmp(recTopic, TOPIC_DEV_SETURL) == 0 || strcmp(recTopic, TOPIC_ALL_SETURL) == 0) {
-    strcpy(fwUrlBase, "");
-    strcpy(fwUrlBase, recMsg);
-    publishMyURL();
-    validContent = true;
-
-  }//END OF SETURL BRANCH
-
-
-  //ALARM BRANCH
-
-  if (strcmp(recTopic, TOPIC_DEV_ALARM) == 0 || strcmp(recTopic, TOPIC_ALL_ALARM) == 0) {
-    Serial.println("ALARM branch");
-    if (strcmp(recMsg, "off") == 0) { //command received for switching OFF blinking ALARM and go back to previous mode
-      LEDMode = prevLEDMode;
-      Serial.println("ALARM off");
-      Serial.printf("ledmode:%d\n", LEDMode);
-      validContent = true;
-    } else
-    {
-      Serial.printf("ALARM MODE:%d\n", atoi(recMsg));
-      if (LEDMode != ALARM) prevLEDMode = LEDMode;
-      LEDMode = ALARM;
-      almMode = atoi(recMsg);
-      Serial.printf("ledmode:%d\n", LEDMode);
-      validContent = true;
-    }
-
-
-  }//END OF ALARM BRANCH
-
-  if (!validContent) Serial.println("Not a valid content");
-  msgReceived = false;
-}
-
-
-/**************MESSAGE PROCESS FUNCTIONS END******************************/
-
-/*
-
-  _   _ _____ _     ____  _____ ____    _____ _   _ _   _  ____ _____ ___ ___  _   _ ____
-  | | | | ____| |   |  _ \| ____|  _ \  |  ___| | | | \ | |/ ___|_   _|_ _/ _ \| \ | / ___|
-  | |_| |  _| | |   | |_) |  _| | |_) | | |_  | | | |  \| | |     | |  | | | | |  \| \___ \
-  |  _  | |___| |___|  __/| |___|  _ <  |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |
-  |_| |_|_____|_____|_|   |_____|_| \_\ |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/
-
-*/
-
-boolean isTimeout(unsigned long checkTime, unsigned long timeWindow)
-{
-  unsigned long now = millis();
-  if (checkTime <= now)
-  {
-    if ( (unsigned long)(now - checkTime )  < timeWindow )
-      return false;
-  }
-  else
-  {
-    if ( (unsigned long)(checkTime - now) < timeWindow )
-      return false;
-  }
-
-  return true;
-}
-
-void flip()
-{
-  int state = digitalRead(WIFI_LED_PIN);  // get the current state of GPIO2 pin
-  digitalWrite(WIFI_LED_PIN, !state);     // set pin to the opposite state
-  if (state) leds[0] = CRGB::Blue; else leds[0] = CRGB::Black;
-  FastLED.show();
-}
-
-
-void blinkErrorLED(CRGB color) {
-  //blinks the first LED according to the requested color
-  EVERY_N_MILLISECONDS( 1000 ) {
-
-    errorBlinkStatus = !errorBlinkStatus;
-  }
-  if (errorStatus) {
-    if (errorBlinkStatus) {
-      leds[0] = color;
-    }
-    else {
-      leds[0] = CRGB::Black;
-    }
-  }
-}
-
-
-/**************OTHER FUNCTIONS END******************************/
+//####Helper functions
 
 /*
 
@@ -1037,14 +494,17 @@ void setup()
   all_off_immediate(); //Clear the LED array
   delay(500); //safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  // FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  // FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
 
   FastLED.setBrightness(MAX_BRIGHTNESS);
   //set_max_power_in_volts_and_milliamps(5, MILLI_AMPERE); //depreciated
   FastLED.setMaxPowerInVoltsAndMilliamps(5, MILLI_AMPERE); //5Volt LEDs
   Serial.begin(115200);
   pinMode(WIFI_LED_PIN, OUTPUT);     // Initialize the INDICATOR_PIN pin as an output
+
+  pinMode(PWM_PIN, OUTPUT);
+
   Serial.println("Booting...");
 
   //KeySwitch init
@@ -1053,9 +513,8 @@ void setup()
   S.enableLongPress(true);
   S.enableRepeat(false);
   S.enableRepeatResult(false);
-  S.setLongPressTime(1000);
-  S.setDoublePressTime(500);
-
+  S.setLongPressTime(3000);
+  S.setDoublePressTime(1000);
 
   Serial.println(__TIMESTAMP__);
   Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
@@ -1067,28 +526,34 @@ void setup()
   //  connectWifi();
   client.setServer(mqttServerIP, 1883);
   client.setCallback(callback);
-
   // WiFi.setSleepMode(WIFI_NONE_SLEEP); //avoid wifi sleep to get rid of flickering AND wifi issues
 
   msgReceived = false;
-
-
 
   Serial.printf("Number of FastLED modes: %d\n", _LAST_);
   Serial.println();
 
   myAlarmLight = new steadyLight();
   myAlarmLight->setElements(0, NUM_LEDS - 1, 0, sinusoid); //define all the LEDs for ALARM with RED color as a basis
-
   myRedLight = new steadyLight();
-  myRedLight->setElements(0, round((NUM_LEDS / 3) - 1), 0, sinusoid); //watch out for LED color index from the trafficLightPalette (red is on position 0)
+  myRedLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 0, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
   myAmberLight = new steadyLight();
   myAmberLight->setElements(round(NUM_LEDS / 3), round((NUM_LEDS * 2 / 3) - 1), 16, sinusoid); //watch out for LED color index from the trafficLightPalette (amber is on position 16)
   myGreenLight = new steadyLight();
-  myGreenLight->setElements(round(NUM_LEDS * 2 / 3), NUM_LEDS - 1 , 32, sinusoid); //watch out for LED color index from the trafficLightPalette (green is on position 32)
+  myGreenLight->setElements(0, round((NUM_LEDS / 3) - 1), 32, sinusoid); //watch out for LED color index from the trafficLightPalette (red is on position 0)
 
+  // FastLED provides these pre-conigured incandescent color profiles:
+  //     Candle, Tungsten40W, Tungsten100W, Halogen, CarbonArc,
+  //     HighNoonSun, DirectSunlight, OvercastSky, ClearBlueSky,
+  // FastLED provides these pre-configured gaseous-light color profiles:
+  //     WarmFluorescent, StandardFluorescent, CoolWhiteFluorescent,
+  //     FullSpectrumFluorescent, GrowLightFluorescent, BlackLightFluorescent,
+  //     MercuryVapor, SodiumVapor, MetalHalide, HighPressureSodium,
+  // FastLED also provides an "Uncorrected temperature" profile
+  //    UncorrectedTemperature;
+  if (ALIAS == "bathmirror")  FastLED.setTemperature( Tungsten40W );
 
-}
+} //****************END SETUP
 
 /*
 
@@ -1102,49 +567,48 @@ void setup()
 
 void loop() {
 
+  handleKeypresses();
+
   /**************CONNECT/RECONNECT SEQUENCE ******************************/
-  if (WiFi.status() != WL_CONNECTED) {
+  if ((WiFi.status() != WL_CONNECTED) && (isTimeout(wifiCheckTimer, connectRepeatTimer))) {
+    wifiCheckTimer = millis();
     Serial.print("Connecting to ");
     Serial.print(ssid);
     Serial.println("...");
     WiFi.begin(ssid, password);
-    if (LEDMode != OFF) prevLEDMode = LEDMode;
-    LEDMode = OFF;
-    FastLED.setBrightness(5);
-    flipper.attach(0.1, flip); //blink quickly during wifi connection
 
-    if (WiFi.waitForConnectResult() != WL_CONNECTED)
-      return;
-    Serial.println("WiFi connected");
+    if (!emergencyState) {  //blinks only if not in emergency light mode
+      if (LEDMode != OFF) prevLEDMode = LEDMode;
+      LEDMode = OFF;
+      FastLED.setBrightness(5);
+      flipper.attach(0.1, flip); //blink quickly during wifi connection
+    }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
 
-    if (!client.connected()) {
+    if ((!client.connected()) && (isTimeout(wifiCheckTimer, connectRepeatTimer))) { //implement delay for retry here if not connected
+      wifiCheckTimer = millis();
       Serial.println("Connecting mqtt client...");
-
-      if (LEDMode != OFF) prevLEDMode = LEDMode; //preserve the previous mode if not already OFF
-      LEDMode = OFF;
-      FastLED.setBrightness(5); //set a dimmed value
-      flipper.attach(0.25, flip); //blink slower during client connection
-
+      if (!emergencyState) {
+        if (LEDMode != OFF) prevLEDMode = LEDMode; //preserve the previous mode if not already OFF
+        LEDMode = OFF;
+        FastLED.setBrightness(5); //set a dimmed value
+        flipper.attach(0.25, flip); //blink slower during client connection
+      }
       //connect with Last Will message as "offline"/retained. This will be published when incorrectly disconnected
       strcpy(msg, "");
       if (client.connect(alias, TOPIC_DEV_STATUS, 1, 1, "offline")) { //boolean connect (clientID, willTopic, willQoS, willRetain, willMessage)
         Serial.println("Client connected");
         Serial.println();
-
-
-        LEDMode = prevLEDMode; //restore the previous LEDMode
+        //LEDMode = prevLEDMode; //restore the previous LEDMode
         FastLED.setBrightness(MAX_BRIGHTNESS); //restore the MAX_BRIGHTNESS
         flipper.detach();
         digitalWrite(WIFI_LED_PIN, HIGH); //switch off the flashing LED when connected
 
         //Subscribe to topics
         subscribeToTopics();
-
         //Publish online status
-
         client.publish(TOPIC_DEV_STATUS, "online", RETAINED);
 
         publishMyIP();
@@ -1152,7 +616,7 @@ void loop() {
       }
       else
       {
-        delay(3000); //if disconnected from mqtt, wait for a while
+        //delay(3000); //if disconnected from mqtt, wait for a while
       }
     }
     /**************CONNECT/RECONNECT SEQUENCE END ******************************/
@@ -1171,107 +635,28 @@ void loop() {
     if (client.connected()) client.loop();
     if (msgReceived) processRecMessage();
 
-
     // insert a delay to keep the framerate modest
     FastLED.delay(1000 / FRAMES_PER_SECOND);
 
     // do some periodic updates
     EVERY_N_MILLISECONDS( 20 ) {
       //gHue++;  // slowly cycle the "base color" through the rainbow
-      if (gHueRoll) gHue = gHue + globalSpeed / 10.00;
+      if (gHueRoll) gHue = gHue + modifiedSpeed / 10.00;
     }
 
     nblendPaletteTowardPalette( currentPalette, targetPalette, blendSpeed);
 
-    // Set FastLED mode
-    switch (LEDMode) {
-      case OFF:   fill_solid( targetPalette, 16, CRGB::Black); all_off() ; gHueRoll = false; break;
-      case STEADY: gHueRoll = false; steady(0, NUM_LEDS - 1, CHSV(0, globalSaturation, 255)); break;
-      case RAINBOW: targetPalette = RainbowColors_p; gHueRoll = true; rainbow(); pastelizeColors(); break;
-      case BPM: targetPalette = PartyColors_p; gHueRoll = false; bpm(); pastelizeColors(); break;
-      case MOVE: gHueRoll = false; SetFavoritePalette1(); move(); pastelizeColors(); break; //EZT MÉG MEGCSINÁLNI MOZGÓRA! ESETLEG ELHALVÁNYÍTÁSSAL (MARQUEE)
-      case NOISE: targetPalette = OceanColors_p; gHueRoll = true; scale = 25; handleNoise(); pastelizeColors(); break;
-      case NOISE1: targetPalette = LavaColors_p; gHueRoll = true; scale = 15; handleNoise(); pastelizeColors(); break;
-      case TEST: gHueRoll = false; steady(testFrom, testTo, CHSV(testHue, globalSaturation, 255));  break;
-      case ALARM: gHueRoll = false;  myAlarmLight->setColor(almMode);
-        if (myAlarmLight->blinkStatus) myAlarmLight->On();
-        if (!myAlarmLight->blinkStatus) myAlarmLight->Off();
-        EVERY_N_MILLISECONDS( 1000 ) {
-          myAlarmLight->blinkStatus = !myAlarmLight->blinkStatus;
-        };
-        break;
-      case AMBERBLINK: gHueRoll = false;
-        if (myAmberLight->blinkStatus) {
-          myAmberLight->On();
-          myRedLight->Off();
-          myGreenLight->Off();
-        }
-        if (!myAmberLight->blinkStatus) myAmberLight->Off();
-        EVERY_N_MILLISECONDS( 800 ) {
-          myAmberLight->blinkStatus = !myAmberLight->blinkStatus;
-        };
-        break;
-      case TRAFFICLIGHT: gHueRoll = false;
-        if (isTimeout(tlMillis, tlTimingLamp)) {
-          tlMillis = millis();
-          tlStatusVar++;
-
-        }
-        if (tlStatusVar > 3) tlStatusVar = 0;
-        switch (tlStatusVar) {
-          case 0: {
-              myRedLight->On();
-              myAmberLight->Off();
-              myGreenLight->Off();
-              tlTimingLamp = 4000;
-            }
-            break;
-          case 1: {
-              myRedLight->On();
-              myAmberLight->On();
-              myGreenLight->Off();
-              tlTimingLamp = 2000;
-            }
-            break;
-          case 2: {
-              myRedLight->Off();
-              myAmberLight->Off();
-              myGreenLight->On();
-              tlTimingLamp = 4000;
-            }
-            break;
-          case 3: {
-              myRedLight->Off();
-              myAmberLight->On();
-              myGreenLight->Off();
-              tlTimingLamp = 2000;
-            }
-            break;
-
-        }
-
-        break;
-
-    }
+    // Set FastLED mode based on LEDMode variable
+    setLEDMode();
 
     blinkErrorLED(CRGB::Red); //blink the first LED in case of error
-    // send the 'leds' array out to the actual LED strip
+
+    // send the 'leds' array out to the LED strip
     FastLED.show();
-
-    //Handle keypresses
-    switch (S.read())
-    {
-      case MD_KeySwitch::KS_NULL:       /* Serial.println("NULL"); */   break;
-      case MD_KeySwitch::KS_PRESS:      Serial.print("\nSINGLE PRESS"); break;
-      case MD_KeySwitch::KS_DPRESS:     Serial.print("\nDOUBLE PRESS"); break;
-      case MD_KeySwitch::KS_LONGPRESS:  Serial.print("\nLONG PRESS");   break;
-      case MD_KeySwitch::KS_RPTPRESS:   Serial.print("\nREPEAT PRESS"); break;
-      default:                          Serial.print("\nUNKNOWN");      break;
-    }
-
 
   } //WIFI STATUS == CONNECTED
 
 } //MAIN LOOP
+
 
 
