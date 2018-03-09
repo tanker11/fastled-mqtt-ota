@@ -194,26 +194,13 @@ void processRecMessage() {
               LEDMode = WHITE_TEST;
               validContent = true;
             }
-            if (strcmp(recValue, "BATHMIRROR") == 0) {
-              prevLEDMode = LEDMode;
-              LEDMode = BATHMIRROR;
-              validContent = true;
-            }
-            if (strcmp(recValue, "BATHMIRRORG") == 0) {
-              prevLEDMode = LEDMode;
-              LEDMode = BATHMIRRORG;
-              validContent = true;
-            }
+
             if (strcmp(recValue, "PINK") == 0) {
               prevLEDMode = LEDMode;
               LEDMode = PINK;
               validContent = true;
             }
-            if (strcmp(recValue, "NOISE_RND4") == 0) {
-              prevLEDMode = LEDMode;
-              LEDMode = NOISE_RND4;
-              validContent = true;
-            }
+
           }
           else
           { //it is indeed a zero value
