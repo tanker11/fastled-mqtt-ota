@@ -254,7 +254,7 @@ void randomFirePalette (unsigned long timing) { //selects from gradient palettes
 
   EVERY_N_MILLISECONDS( timing ) { //new random palette every n seconds. In order to avoid wait time, we apply the palette immediately on mode change
     randomFireNumber = random8(8);
-      EVERY_N_MILLISECONDS( timing * 5 ) {//we do this rarely as flipping the value causes sudden color flip
+          EVERY_N_MILLISECONDS( timing * 5 ) {//we do this rarely as flipping the value causes sudden color flip
     if (random8(100) > 50) reverseColor = !reverseColor; //with 50 per cent probability reverse the colors (used on fixed palette colors in REVERSEXMAS for example)
     
     //Serial.println(reverse);
@@ -271,6 +271,7 @@ void randomFirePalette (unsigned long timing) { //selects from gradient palettes
     case 5: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 255, 255) , CHSV(0, 210, 255)); break; //red-aqua fire
     case 6: targetPalette = CRGBPalette16( CRGB::Black, CHSV(128, 255, 180), CHSV(0, 130, 255) , CHSV(0, 80, 255)); break; //pink-aqua fire
     case 7: targetPalette = CRGBPalette16( CRGB::Black, CRGB::MidnightBlue, CRGB::Aquamarine , CRGB::Aqua); break; //midnightblue-aqua fire
+    case 8: targetPalette = CRGBPalette16( CRGB::Black, CHSV(100, 255, 180), CHSV(15, 255, 255) , CHSV(15, 160, 255)); break; //green-peach blossom fire
     default: targetPalette = HeatColors_p; break; //traditional fire colors
   }
 }
